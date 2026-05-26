@@ -1,0 +1,14 @@
+# Node / serve
+node_modules/
+.cache/
+.playwright-mcp/
+*.png
+*.dxf
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Editor
+.vscode/
+*.code-workspace
