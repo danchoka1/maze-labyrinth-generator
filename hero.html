@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hero Scroll</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ease-smooth: cubic-bezier(0.75, 0, 0.25, 1);
+  }
+
+  html { scroll-behavior: auto; }
+
+  body {
+    background: #000;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: #fff;
+    overscroll-behavior: none;
+  }
+
+  /* ─── Scroll driver: tall enough to scroll through ─────────────── */
+  #hero-scroll {
+    height: 320vh;
+    position: relative;
+  }
+
+  /* ─── Sticky frame that stays in viewport while parent scrolls ─── */
+  #hero-sticky {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+    background: #000;
+  }
+
+  /* ─── Image layer — starts tiny, expands to fill ───────────────── */
+  #hero-image-wrap {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  #hero-image-frame {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    opacity: 0;
+    border-radius: 28px;
+    will-change: transform, border-radius, opacity;
+    transform: scale(0.12);
+    transform-origin: center center;
+  }
+
+  #hero-image-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+    will-change: transform;
+  }
+
+  /* ─── Intro overlay — "Scroll Down" + arrow ────────────────────── */
+  #hero-intro {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    pointer-events: none;
+  }
+
+  .hero-label {
+    font-size: clamp(13px, 1.4vw, 20px);
+    font-weight: 400;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.7);
+    user-select: none;
+  }
+
+  .hero-title {
+    font-size: clamp(38px, 7vw, 100px);
+    font-weight: 300;
+    letter-spacing: -0.01em;
+    line-height: 1.05;
+    text-align: center;
+    color: #fff;
+    user-select: none;
+  }
+
+  /* ─── Arrow ─────────────────────────────────────────────────────── */
+  #hero-arrow {
+    pointer-events: all;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #hero-arrow-icon {
+    width: 44px;
+    height: 44px;
+    animation: arrowBounce 1.8s var(--ease-smooth) infinite;
+    transition: transform 0.4s var(--ease-smooth);
+  }
+
+  #hero-arrow:hover #hero-arrow-icon {
+    animation-play-state: paused;
+    transform: translateY(10px) !important;
+  }
+
+  #hero-arrow-line {
+    width: 1px;
+    height: 0;
+    background: rgba(255,255,255,0.4);
+    animation: lineDrop 1.8s var(--ease-smooth) infinite;
+  }
+
+  @keyframes arrowBounce {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(8px); }
+  }
+
+  @keyframes lineDrop {
+    0%, 20%  { height: 0;    opacity: 0; }
+    50%      { height: 28px; opacity: 0.5; }
+    80%, 100%{ height: 0;    opacity: 0; transform: translateY(28px); }
+  }
+
+  /* ─── Noise grain overlay for texture (optional but premium) ───── */
+  #hero-grain {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 180px;
+  }
+
+  /* ─── Scroll indicator progress bar at bottom ───────────────────── */
+  #scroll-progress {
+    position: absolute;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 4;
+    pointer-events: none;
+  }
+
+  .progress-track {
+    width: 80px;
+    height: 1px;
+    background: rgba(255,255,255,0.15);
+    position: relative;
+    overflow: hidden;
+    border-radius: 1px;
+  }
+
+  .progress-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 0%;
+    background: rgba(255,255,255,0.7);
+    transition: width 0.05s linear;
+  }
+
+  .progress-label {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: rgba(255,255,255,0.35);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ─── Section after hero ─────────────────────────────────────────── */
+  #after-hero {
+    background: #0a0a0a;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+    padding: 80px 40px;
+  }
+
+  #after-hero h2 {
+    font-size: clamp(28px, 5vw, 64px);
+    font-weight: 300;
+    color: #fff;
+    text-align: center;
+    letter-spacing: -0.01em;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.8s var(--ease-smooth), transform 0.8s var(--ease-smooth);
+  }
+
+  #after-hero h2.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  #after-hero p {
+    font-size: clamp(14px, 1.6vw, 18px);
+    color: rgba(255,255,255,0.45);
+    text-align: center;
+    max-width: 480px;
+    line-height: 1.7;
+    letter-spacing: 0.01em;
+  }
+
+</style>
+</head>
+<body>
+
+<!-- ─── HERO ──────────────────────────────────────────────────────── -->
+<div id="hero-scroll">
+  <div id="hero-sticky">
+
+    <!-- Grain texture -->
+    <div id="hero-grain"></div>
+
+    <!-- Image that expands on scroll -->
+    <div id="hero-image-wrap">
+      <div id="hero-image-frame">
+        <img id="hero-img" src="images/IMG_0798.jpg" alt="" draggable="false">
+      </div>
+    </div>
+
+    <!-- Intro text + arrow -->
+    <div id="hero-intro">
+      <span class="hero-label">Scroll to explore</span>
+      <h1 class="hero-title">Scroll Down</h1>
+
+      <div id="hero-arrow" onclick="window.scrollBy({top: window.innerHeight * 1.5, behavior: 'smooth'})">
+        <div id="hero-arrow-line"></div>
+        <svg id="hero-arrow-icon" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="22" cy="22" r="21" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+          <line x1="22" y1="13" x2="22" y2="31" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+          <polyline points="15,25 22,32 29,25" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Scroll progress -->
+    <div id="scroll-progress">
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <span class="progress-label" id="progress-label">000</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─── CONTENT AFTER HERO ────────────────────────────────────────── -->
+<div id="after-hero">
+  <h2 id="after-heading">Add your content here.</h2>
+  <p>This is the section revealed after the scroll transition. Replace with whatever comes next.</p>
+</div>
+
+
+<script>
+  const heroScroll  = document.getElementById('hero-scroll');
+  const heroIntro   = document.getElementById('hero-intro');
+  const heroFrame   = document.getElementById('hero-image-frame');
+  const heroImg     = document.getElementById('hero-img');
+  const progressFill= document.getElementById('progress-fill');
+  const progressLbl = document.getElementById('progress-label');
+  const afterHeading= document.getElementById('after-heading');
+
+  // ── Easing ──────────────────────────────────────────────────────
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function lerp(a, b, t)    { return a + (b - a) * t; }
+
+  // Custom ease: slow start, fast middle, ease out at end
+  function easeInOutQuart(t) {
+    return t < 0.5 ? 8*t*t*t*t : 1 - 8*(--t)*t*t*t;
+  }
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  // ── Subtle image parallax on mouse ──────────────────────────────
+  let mouseX = 0, mouseY = 0;
+  let imgOffX = 0, imgOffY = 0;
+  const PARALLAX_STRENGTH = 12; // px max shift
+
+  document.addEventListener('mousemove', e => {
+    mouseX = (e.clientX / window.innerWidth  - 0.5) * 2; // -1 to 1
+    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  });
+
+  // ── Scroll handler ───────────────────────────────────────────────
+  let ticking = false;
+
+  function update() {
+    const scrollH   = heroScroll.offsetHeight - window.innerHeight;
+    const rawProg   = clamp(window.scrollY / scrollH, 0, 1);
+
+    // ── Intro fade (0 → 0.28 of scroll range) ──────────────────
+    const introFade = clamp(rawProg / 0.28, 0, 1);
+    heroIntro.style.opacity  = 1 - introFade;
+    heroIntro.style.transform = `translateY(${-introFade * 20}px)`;
+
+    // ── Image reveal ────────────────────────────────────────────
+    // Starts at progress 0.03, fully expanded by 0.9
+    const imgStart    = 0.03;
+    const imgEnd      = 0.9;
+    const imgProgress = clamp((rawProg - imgStart) / (imgEnd - imgStart), 0, 1);
+    const easedImg    = easeInOutQuart(imgProgress);
+
+    // Scale: from 0.12 (small box in center) to 1 (fills viewport)
+    const scale  = lerp(0.12, 1.0, easedImg);
+    // Border radius: from 28px to 0
+    const radius = lerp(28, 0, easeOutCubic(imgProgress));
+    // Opacity: snap in quickly then stay at 1
+    const opacity= clamp(rawProg / 0.08, 0, 1);
+
+    // Subtle image parallax counter-move (feels like the image floats)
+    // Dampen parallax as scale increases (full-screen image shouldn't parallax)
+    const parallaxFactor = 1 - easedImg;
+    imgOffX += (mouseX * PARALLAX_STRENGTH * parallaxFactor - imgOffX) * 0.06;
+    imgOffY += (mouseY * PARALLAX_STRENGTH * parallaxFactor - imgOffY) * 0.06;
+
+    heroFrame.style.transform     = `scale(${scale})`;
+    heroFrame.style.borderRadius  = `${radius}px`;
+    heroFrame.style.opacity       = opacity;
+    heroImg.style.transform       = `translate(${imgOffX}px, ${imgOffY}px) scale(1.04)`;
+
+    // ── Progress bar ────────────────────────────────────────────
+    const pct = Math.round(rawProg * 100);
+    progressFill.style.width = pct + '%';
+    progressLbl.textContent  = String(pct).padStart(3, '0');
+
+    // ── Fade progress bar out as image fills ─────────────────
+    const progressBar = document.getElementById('scroll-progress');
+    progressBar.style.opacity = 1 - clamp((rawProg - 0.7) / 0.2, 0, 1);
+
+    ticking = false;
+  }
+
+  window.addEventListener('scroll', () => {
+    if (!ticking) { requestAnimationFrame(update); ticking = true; }
+  }, { passive: true });
+
+  // ── RAF loop for smooth parallax (even without scroll) ──────────
+  function rafLoop() {
+    if (window.scrollY < window.innerHeight) {
+      const scrollH = heroScroll.offsetHeight - window.innerHeight;
+      const rawProg = clamp(window.scrollY / scrollH, 0, 1);
+      const easedImg = easeInOutQuart(clamp((rawProg - 0.03) / 0.87, 0, 1));
+      const parallaxFactor = 1 - easedImg;
+
+      imgOffX += (mouseX * PARALLAX_STRENGTH * parallaxFactor - imgOffX) * 0.06;
+      imgOffY += (mouseY * PARALLAX_STRENGTH * parallaxFactor - imgOffY) * 0.06;
+      heroImg.style.transform = `translate(${imgOffX}px, ${imgOffY}px) scale(1.04)`;
+    }
+    requestAnimationFrame(rafLoop);
+  }
+  requestAnimationFrame(rafLoop);
+
+  // ── IntersectionObserver for after-hero heading ──────────────────
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.3 });
+  io.observe(afterHeading);
+
+  // ── Init ─────────────────────────────────────────────────────────
+  update();
+</script>
+</body>
+</html>
