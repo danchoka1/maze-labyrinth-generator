@@ -1,40 +1,86 @@
-# Maze Labyrinth Generator
+# Labyrinth · A Puzzle Cast in Bronze
 
-A browser-based tool for designing and exporting cylindrical maze labyrinths.
+**[Live site →](https://project-zy44r.vercel.app/hero)**
 
-## Features
+An immersive single-page experience that leads you through a torch-lit 3D corridor to a bronze labyrinth cylinder — then descends into a maze-builder that produces a real, cuttable artefact.
 
-- **Step 1** — Enter cylinder diameter + height → auto-calculates the unrolled rectangle (circumference × height)
-- **Step 2** — Set cell size (mm) + difficulty → grid dimensions auto-fill; generate a perfect maze (exactly 1 solution, no loops)
-- **Step 3** — Preview with optional solution overlay; export as **PNG** or **DXF** (1:1 mm scale)
-- **Step 4** — Built-in DXF viewer with pan, zoom, and **snap-to-geometry measurement tool**
+---
 
-## Maze algorithms
+## Experience
 
-| Difficulty | Algorithm | Style |
-|---|---|---|
-| Normal | Recursive DFS | Long winding corridors |
-| Medium | Hybrid DFS (random stack pick) | Balanced branching |
-| Hard | Prim's algorithm | Bushy, many short dead ends |
+**The Corridor** — A scroll-driven dolly through a stone passage lit by torch flicker and particle fog. A bronze cylinder waits at the end. Walk toward it. Touch it.
 
-## DXF Viewer — Snap types
+**The Forge** — Enter cylinder dimensions (diameter × height × channel width in mm) and choose a temperament:
+- *i. Gentle* — depth-first, long winding passages
+- *ii. Winding* — hybrid algorithm, unpredictable turns
+- *iii. Merciless* — Prim's, dense and disorienting
 
-| Symbol | Snap | Triggered when |
-|---|---|---|
-| 🟡 Gold square | **Endpoint** | Cursor near a line endpoint / corner |
-| 🔵 Cyan triangle | **Midpoint** | Cursor near the centre of a line |
-| 🔵 Cyan circle+cross | **Nearest** | Cursor near any point on a line |
+Watch the maze carve itself in real time. Reveal Ariadne's thread. Export the unwrapped plan as **PNG** or **DXF** (millimetre units, ready for a laser cutter or CNC).
 
-## Running locally
+**The Drafting Room** — Drop any DXF file to inspect it: pan, zoom, pinch. A measure tool with endpoint / midpoint / nearest-on-line snap reads distances in mm. The Forge plan opens here directly — no download needed.
+
+**The Background** — A faint DFS maze covers the story sections. Walls within 170 px of the cursor heat up to ember and cool as you move away.
+
+---
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| 3D scene | Three.js r158 (local ES module) |
+| Animations | GSAP 3.12 + ScrollTrigger |
+| Fonts | Cormorant Garamond · Space Grotesk |
+| Hosting | Vercel (static, `cleanUrls`) |
+
+No build step. No framework. One HTML file.
+
+---
+
+## Run locally
+
+The site uses ES module imports — it must be served over HTTP, not `file://`.
 
 ```bash
-npx serve . --listen 3333
-# then open http://localhost:3333
+cd maze-labyrinth-generator
+python -m http.server 3333
 ```
 
-Or double-click **run.bat**.
+Open **http://localhost:3333/hero** in a browser.
 
-## Deployment
+Alternatives:
+```bash
+npx serve -l 3333 .
+# or VS Code → Live Server extension
+# or double-click run.bat (Windows)
+```
 
-Deployed as a static site — no build step needed.  
-Works on Vercel, Netlify, GitHub Pages, or any static host.
+---
+
+## Repository layout
+
+```
+hero.html          # the site (everything inline)
+vercel.json        # cleanUrls + root redirect to /hero
+run.bat            # one-click local server (Windows)
+libs/              # GSAP 3.12 + ScrollTrigger (vendored)
+vendor/            # Three.js r158 + loaders (vendored)
+images/opt/        # optimised runtime assets
+  cylinder.glb       # bronze labyrinth model (10 MB)
+  wall_2k.jpg        # corridor wall texture
+  floor_2k.jpg       # corridor floor texture
+images/
+  puzzle.mp4         # story section video
+  moonless_golf_4k.exr  # HDR night sky
+docs/              # design system, product brief, build report
+```
+
+---
+
+## Design tokens
+
+| Token | Value | Role |
+|---|---|---|
+| `--ink` | `#0a0705` | Background |
+| `--bone` | `#e8ddcc` | Primary text |
+| `--ember` | `#d9a05b` | Accent / interactive |
+| `--ember-hot` | `#f2c285` | Highlight |

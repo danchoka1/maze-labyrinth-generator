@@ -4,7 +4,6 @@ node_modules/
 .playwright-mcp/
 *.png
 *.dxf
-# *.mp4 — video files ARE committed (hero video)
 
 # OS
 Thumbs.db
@@ -27,34 +26,29 @@ images/*.blend.zip
 images/*.exr.zip
 images/hf_*
 images/maze.mp4
+images/maze*.jpg
 
 # Claude session files
 .claude/
 
-# Scratch HTML experiments
+# Scratch HTML files and experiments
 bg-demo.html
 bg-final.html
 bg-morph.html
 bg-video.html
 cleo-html.txt
+hero_v1_backup.html
+experience.html
+three.min.js
 
-# Leftover JS variables dumped as files (artifact of preview tool)
-0
-0).'
-0.001
-0.01
-0.02
-0.05
-0.08
-2)
-4
+# Debug artifacts — JS variable names dumped as zero-byte files by preview tool
+[0-9]*
+nearest-on-line*
+controls.lock*)
+imgAsp*
+URL.revokeObject*
+uvAttr.setXY*
 COLS)
 ROWS
-URL.revokeObjectURL(url)
-controls.lock())
-imgAsp)
-nearest-on-line,+
-uvAttr.setXY(vi
 {
-{,+
-{,-
+{,*
