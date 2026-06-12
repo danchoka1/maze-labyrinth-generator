@@ -4,6 +4,7 @@ node_modules/
 .playwright-mcp/
 *.png
 *.dxf
+# *.mp4 — video files ARE committed (hero video)
 
 # OS
 Thumbs.db
@@ -12,3 +13,48 @@ Thumbs.db
 # Editor
 .vscode/
 *.code-workspace
+
+# Scratch / preview screenshots
+*.jpeg
+images/*.jpg
+# production textures (images/opt/*.jpg) are force-added so gitignore doesn't affect them once tracked
+
+# Raw / source 3D assets (not deployed)
+images/glbs/
+images/moss_01/
+images/stone_pathway_02/
+images/*.blend.zip
+images/*.exr.zip
+images/hf_*
+images/maze.mp4
+
+# Claude session files
+.claude/
+
+# Scratch HTML experiments
+bg-demo.html
+bg-final.html
+bg-morph.html
+bg-video.html
+cleo-html.txt
+
+# Leftover JS variables dumped as files (artifact of preview tool)
+0
+0).'
+0.001
+0.01
+0.02
+0.05
+0.08
+2)
+4
+COLS)
+ROWS
+URL.revokeObjectURL(url)
+controls.lock())
+imgAsp)
+nearest-on-line,+
+uvAttr.setXY(vi
+{
+{,+
+{,-

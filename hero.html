@@ -1,391 +1,2280 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="gate">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hero Scroll</title>
+<title>Labyrinth · A Puzzle Cast in Bronze</title>
+<meta name="description" content="A bronze labyrinth cylinder. Two halves, locked by the maze itself. Enter the corridor and find the way through.">
+<meta property="og:title" content="Labyrinth">
+<meta property="og:description" content="A puzzle cast in bronze. Enter the corridor.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0705'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23d9a05b' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3.5' fill='%23d9a05b'/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Space+Grotesk:wght@400;500&display=swap" rel="stylesheet">
+
+<script>
+// Always re-enter at the mouth of the corridor: no scroll restoration.
+// (Restoring near the artifact stranded users behind the enter gate.)
+history.scrollRestoration = 'manual';
+window.scrollTo(0, 0);
+</script>
+<script src="/libs/gsap.min.js"></script>
+<script src="/libs/ScrollTrigger.min.js"></script>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "/three.module.js",
+    "three/addons/loaders/GLTFLoader": "/GLTFLoader.js",
+    "three/addons/loaders/EXRLoader":  "/EXRLoader.js"
+  }
+}
+</script>
+
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* ════════════════════════════════════════════════════════════════════
+   TOKENS
+   ════════════════════════════════════════════════════════════════════ */
+:root {
+  --ink:        #0a0705;
+  --ink-2:      #120d08;
+  --bone:       #e8ddcc;
+  --bone-dim:   #9a8d78;
+  --bone-faint: #5e5445;
+  --ember:      #d9a05b;
+  --ember-hot:  #f2c285;
+  --line:       rgba(232, 221, 204, 0.14);
 
-  :root {
-    --ease-smooth: cubic-bezier(0.75, 0, 0.25, 1);
-  }
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-ui:      'Space Grotesk', system-ui, sans-serif;
 
-  html { scroll-behavior: auto; }
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
 
-  body {
-    background: #000;
-    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-    color: #fff;
-    overscroll-behavior: none;
-  }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ─── Scroll driver: tall enough to scroll through ─────────────── */
-  #hero-scroll {
-    height: 320vh;
-    position: relative;
-  }
+html { scroll-behavior: auto; }
+html.gate { overflow: hidden; }
 
-  /* ─── Sticky frame that stays in viewport while parent scrolls ─── */
-  #hero-sticky {
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    width: 100%;
-    overflow: hidden;
-    background: #000;
-  }
+body {
+  background: var(--ink);
+  color: var(--bone);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.8;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
 
-  /* ─── Image layer — starts tiny, expands to fill ───────────────── */
-  #hero-image-wrap {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1;
-    pointer-events: none;
-  }
+::selection { background: var(--ember); color: var(--ink); }
 
-  #hero-image-frame {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    opacity: 0;
-    border-radius: 28px;
-    will-change: transform, border-radius, opacity;
-    transform: scale(0.12);
-    transform-origin: center center;
-  }
+/* no visible scrollbar: the journey is the only indicator */
+html { scrollbar-width: none; }
+::-webkit-scrollbar { display: none; }
 
-  #hero-image-frame img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-    display: block;
-    will-change: transform;
-  }
+a { color: inherit; text-decoration: none; }
 
-  /* ─── Intro overlay — "Scroll Down" + arrow ────────────────────── */
-  #hero-intro {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 32px;
-    pointer-events: none;
-  }
+:focus-visible {
+  outline: 1px solid var(--ember);
+  outline-offset: 4px;
+}
 
-  .hero-label {
-    font-size: clamp(13px, 1.4vw, 20px);
-    font-weight: 400;
-    letter-spacing: 0.35em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.7);
-    user-select: none;
-  }
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
 
-  .hero-title {
-    font-size: clamp(38px, 7vw, 100px);
-    font-weight: 300;
-    letter-spacing: -0.01em;
-    line-height: 1.05;
-    text-align: center;
-    color: #fff;
-    user-select: none;
-  }
+/* Reusable micro-label */
+.label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--ember);
+}
 
-  /* ─── Arrow ─────────────────────────────────────────────────────── */
-  #hero-arrow {
-    pointer-events: all;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    margin-top: 8px;
-    -webkit-tap-highlight-color: transparent;
-  }
+/* ════════════════════════════════════════════════════════════════════
+   CANVAS + SCENE CHROME
+   ════════════════════════════════════════════════════════════════════ */
+#c {
+  position: fixed; inset: 0;
+  width: 100%; height: 100%;
+  z-index: 0; display: block;
+}
 
-  #hero-arrow-icon {
-    width: 44px;
-    height: 44px;
-    animation: arrowBounce 1.8s var(--ease-smooth) infinite;
-    transition: transform 0.4s var(--ease-smooth);
-  }
+#vignette {
+  position: fixed; inset: 0; z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse 105% 90% at 50% 45%,
+              transparent 55%, rgba(6, 4, 2, 0.55) 100%);
+}
 
-  #hero-arrow:hover #hero-arrow-icon {
-    animation-play-state: paused;
-    transform: translateY(10px) !important;
-  }
+#scroll-driver { height: 380vh; position: relative; z-index: 1; pointer-events: none; }
 
-  #hero-arrow-line {
-    width: 1px;
-    height: 0;
-    background: rgba(255,255,255,0.4);
-    animation: lineDrop 1.8s var(--ease-smooth) infinite;
-  }
+/* ════════════════════════════════════════════════════════════════════
+   PRELOADER
+   ════════════════════════════════════════════════════════════════════ */
+#preloader {
+  position: fixed; inset: 0; z-index: 45;
+  background: var(--ink);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 28px;
+}
+#preloader .label { color: var(--bone-faint); }
+#load-pct {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: clamp(56px, 9vw, 110px);
+  line-height: 1;
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+#load-bar {
+  width: min(280px, 60vw); height: 1px;
+  background: var(--line);
+  overflow: hidden;
+}
+#load-bar i {
+  display: block; height: 100%;
+  background: var(--ember);
+  transform-origin: left;
+  transform: scaleX(0);
+}
 
-  @keyframes arrowBounce {
-    0%, 100% { transform: translateY(0px); }
-    50%       { transform: translateY(8px); }
-  }
+/* ════════════════════════════════════════════════════════════════════
+   NAV
+   ════════════════════════════════════════════════════════════════════ */
+#nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+  display: flex; align-items: center;
+  padding: 28px clamp(24px, 5vw, 64px);
+  opacity: 0; visibility: hidden;
+  pointer-events: none;
+}
+#nav .brand {
+  pointer-events: all;
+  font-family: var(--font-ui);
+  font-size: 13px; font-weight: 500;
+  letter-spacing: 0.45em; text-transform: uppercase;
+}
 
-  @keyframes lineDrop {
-    0%, 20%  { height: 0;    opacity: 0; }
-    50%      { height: 28px; opacity: 0.5; }
-    80%, 100%{ height: 0;    opacity: 0; transform: translateY(28px); }
-  }
+/* ════════════════════════════════════════════════════════════════════
+   HERO OVERLAY
+   ════════════════════════════════════════════════════════════════════ */
+#hero-overlay {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: clamp(24px, 4vh, 44px);
+  text-align: center;
+  padding: 0 24px;
+}
+#hero-overlay.gone { pointer-events: none; }
 
-  /* ─── Noise grain overlay for texture (optional but premium) ───── */
-  #hero-grain {
-    position: absolute;
-    inset: 0;
-    z-index: 3;
-    pointer-events: none;
-    opacity: 0.04;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-    background-repeat: repeat;
-    background-size: 180px;
-  }
+#hero-label { color: var(--bone-dim); }
 
-  /* ─── Scroll indicator progress bar at bottom ───────────────────── */
-  #scroll-progress {
-    position: absolute;
-    bottom: 32px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    z-index: 4;
-    pointer-events: none;
-  }
+#hero-title {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: clamp(38px, 12vw, 190px);
+  line-height: 0.95;
+  letter-spacing: 0.08em;
+  text-indent: 0.08em; /* optically recentre tracked text */
+  color: var(--bone);
+  display: flex;
+}
+#hero-title .ch {
+  display: inline-block;
+  will-change: transform, opacity;
+}
 
-  .progress-track {
-    width: 80px;
-    height: 1px;
-    background: rgba(255,255,255,0.15);
-    position: relative;
-    overflow: hidden;
-    border-radius: 1px;
-  }
+#enter-btn {
+  pointer-events: all;
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--bone-faint);
+  border-radius: 100px;
+  padding: 18px 56px;
+  font-family: var(--font-ui);
+  font-size: 11px; font-weight: 500;
+  letter-spacing: 0.4em; text-indent: 0.4em;
+  text-transform: uppercase;
+  color: var(--bone-dim);
+  cursor: pointer;
+  transition: border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+#enter-btn:hover {
+  border-color: var(--ember);
+  color: var(--ember-hot);
+  box-shadow: 0 0 36px rgba(217, 160, 91, 0.12);
+}
 
-  .progress-fill {
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 0%;
-    background: rgba(255,255,255,0.7);
-    transition: width 0.05s linear;
-  }
+/* ════════════════════════════════════════════════════════════════════
+   HINTS + PROMPTS
+   ════════════════════════════════════════════════════════════════════ */
+#interact-btn {
+  position: fixed; left: 50%; bottom: 22%;
+  transform: translateX(-50%);
+  z-index: 12;
+  appearance: none; background: rgba(10, 7, 5, 0.35);
+  border: 1px solid rgba(217, 160, 91, 0.4);
+  border-radius: 100px;
+  padding: 14px 36px;
+  font-family: var(--font-ui);
+  font-size: 10px; font-weight: 500;
+  letter-spacing: 0.4em; text-indent: 0.4em;
+  text-transform: uppercase;
+  color: var(--ember-hot);
+  cursor: pointer;
+  opacity: 0; visibility: hidden;
+  transition: opacity 0.4s ease, visibility 0.4s ease, border-color 0.25s ease;
+}
+#interact-btn.visible { opacity: 1; visibility: visible; }
+#interact-btn:hover { border-color: var(--ember-hot); }
 
-  .progress-label {
-    font-size: 10px;
-    letter-spacing: 0.2em;
-    color: rgba(255,255,255,0.35);
-    font-variant-numeric: tabular-nums;
-  }
+/* ════════════════════════════════════════════════════════════════════
+   VEIL (transition)
+   ════════════════════════════════════════════════════════════════════ */
+#veil {
+  position: fixed; inset: 0; z-index: 40;
+  background: var(--ink);
+  opacity: 0; pointer-events: none;
+}
 
-  /* ─── Section after hero ─────────────────────────────────────────── */
-  #after-hero {
-    background: #0a0a0a;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    gap: 20px;
-    padding: 80px 40px;
-  }
+/* ════════════════════════════════════════════════════════════════════
+   STORY
+   ════════════════════════════════════════════════════════════════════ */
+#story {
+  position: relative; z-index: 2;
+  background: var(--ink);
+  /* sealed until the artifact is touched: the page ends at the corridor */
+  display: none;
+}
+#story.open { display: block; }
 
-  #after-hero h2 {
-    font-size: clamp(28px, 5vw, 64px);
-    font-weight: 300;
-    color: #fff;
-    text-align: center;
-    letter-spacing: -0.01em;
-    opacity: 0;
-    transform: translateY(20px);
-    transition: opacity 0.8s var(--ease-smooth), transform 0.8s var(--ease-smooth);
-  }
+/* interactive maze background: faint bone walls, ember heat near the cursor */
+#maze-bg {
+  position: fixed; top: 0; left: 0; z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+  -webkit-mask-image: radial-gradient(120% 95% at 50% 45%, transparent 26%, #000 78%);
+          mask-image: radial-gradient(120% 95% at 50% 45%, transparent 26%, #000 78%);
+}
+#maze-bg.lit { opacity: 1; }
 
-  #after-hero h2.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
+#story::before {
+  /* soft top edge so the canvas hand-off never bands */
+  content: '';
+  position: absolute; top: -18vh; left: 0; right: 0; height: 18vh;
+  background: linear-gradient(transparent, var(--ink));
+  pointer-events: none;
+}
 
-  #after-hero p {
-    font-size: clamp(14px, 1.6vw, 18px);
-    color: rgba(255,255,255,0.45);
-    text-align: center;
-    max-width: 480px;
-    line-height: 1.7;
-    letter-spacing: 0.01em;
-  }
+.chamber {
+  position: relative; z-index: 1;
+  padding: clamp(120px, 18vh, 220px) clamp(24px, 7vw, 96px);
+  max-width: 1480px;
+  margin: 0 auto;
+}
 
+.chamber .label { display: block; margin-bottom: clamp(28px, 4vh, 48px); }
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 300;
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+  color: var(--bone);
+}
+.display em { font-style: italic; color: var(--ember-hot); }
+
+.chamber p.body {
+  color: var(--bone-dim);
+  font-size: clamp(15px, 1.25vw, 17px);
+  max-width: 58ch;
+}
+
+/* split-word reveal scaffolding */
+.split .w { display: inline-block; overflow: hidden; vertical-align: top; }
+.split .w > i { display: inline-block; font-style: inherit; will-change: transform; }
+
+/* ── 01 · Forge intro ──────────────────────────────────────────── */
+#forge-intro .display { font-size: clamp(44px, 6.5vw, 104px); max-width: 14ch; }
+#forge-intro p.body { margin-top: clamp(32px, 5vh, 64px); }
+
+/* ── 02 · Builder ──────────────────────────────────────────────── */
+#builder .display { font-size: clamp(40px, 5.5vw, 88px); margin-bottom: clamp(56px, 9vh, 110px); }
+
+#bench {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(48px, 6vw, 110px);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  #bench { grid-template-columns: 1fr; }
+}
+
+/* editorial fields: no boxes, just the number and a hairline */
+.field { margin-bottom: clamp(28px, 4vh, 44px); }
+.field label {
+  display: block;
+  font-size: 10px; font-weight: 500;
+  letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--bone-faint);
+  margin-bottom: 10px;
+}
+.field-line {
+  display: flex; align-items: baseline; gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+  transition: border-color 0.3s ease;
+}
+.field-line:focus-within { border-color: var(--ember); }
+.field-line input {
+  appearance: textfield; -moz-appearance: textfield;
+  background: none; border: none; outline: none;
+  width: 100%;
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: clamp(30px, 2.6vw, 40px);
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+.field-line input::-webkit-outer-spin-button,
+.field-line input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.field-line i {
+  font-style: normal;
+  font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase;
+  color: var(--bone-faint);
+}
+
+#diff { border: none; margin: clamp(36px, 5vh, 56px) 0 0; }
+#diff legend { margin-bottom: 18px; color: var(--bone-faint); }
+.diff-opt { display: block; cursor: pointer; }
+.diff-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.diff-opt span {
+  display: inline-block;
+  padding: 9px 0;
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: clamp(22px, 2vw, 30px);
+  color: var(--bone-dim);
+  border-bottom: 1px solid transparent;
+  transition: color 0.25s ease, border-color 0.25s ease;
+}
+.diff-opt span em {
+  font-style: italic;
+  color: var(--bone-faint);
+  margin-right: 14px;
+}
+.diff-opt:hover span { color: var(--bone); }
+.diff-opt input:checked + span { color: var(--ember-hot); border-bottom-color: var(--ember); }
+.diff-opt input:checked + span em { color: var(--ember); }
+.diff-opt input:focus-visible + span { outline: 1px solid var(--ember); outline-offset: 4px; }
+
+#readout {
+  margin: clamp(32px, 5vh, 52px) 0;
+  font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--bone-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+#plan-actions { margin-top: 28px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+#plan-actions[hidden] { display: none; }
+.quiet {
+  appearance: none; background: none; border: none;
+  padding: 8px 0; cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 11px; font-weight: 400;
+  letter-spacing: 0.25em; text-transform: uppercase;
+  color: var(--bone-dim);
+  transition: color 0.25s ease;
+}
+.quiet:hover { color: var(--ember-hot); }
+.quiet .dot {
+  display: inline-block; width: 7px; height: 7px;
+  border: 1px solid var(--bone-faint); border-radius: 50%;
+  margin-right: 12px;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+.quiet[aria-pressed="true"] .dot { background: var(--ember); border-color: var(--ember); }
+.quiet[aria-pressed="true"] { color: var(--ember-hot); }
+
+#plan { position: relative; }
+#maze-canvas {
+  display: block; width: 100%; height: auto;
+}
+#plan figcaption {
+  margin-top: 18px;
+  font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--bone-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 03 · Drafting room (DXF viewer) ──────────────────────────── */
+#draft .display { font-size: clamp(40px, 5.5vw, 88px); margin-bottom: clamp(48px, 8vh, 96px); }
+
+#dxf-drop {
+  display: block; width: 100%;
+  appearance: none; background: none; cursor: pointer;
+  border: 1px solid var(--line);
+  padding: clamp(56px, 9vh, 110px) clamp(24px, 4vw, 64px);
+  text-align: center;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+#dxf-drop[hidden] { display: none; }
+#dxf-drop:hover, #dxf-drop.drag-over, #dxf-drop:focus-visible {
+  border-color: var(--ember);
+  background: rgba(217, 160, 91, 0.03);
+  outline: none;
+}
+#dxf-drop .drop-title {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 300; font-style: italic;
+  font-size: clamp(26px, 2.8vw, 42px);
+  color: var(--bone-dim);
+  margin-bottom: 16px;
+  transition: color 0.3s ease;
+}
+#dxf-drop:hover .drop-title, #dxf-drop.drag-over .drop-title { color: var(--ember-hot); }
+#dxf-drop .drop-hint {
+  font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--bone-faint);
+}
+
+#dxf-room[hidden] { display: none; }
+#dxf-toolbar {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 28px;
+  margin-bottom: 18px;
+}
+#dxf-toolbar .quiet[aria-pressed="true"] { color: var(--ember-hot); }
+#dxf-info {
+  margin-left: auto;
+  font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--bone-faint);
+  font-variant-numeric: tabular-nums;
+}
+#dxf-wrap {
+  position: relative;
+  background: var(--ink-2);
+  border: 1px solid var(--line);
+  height: clamp(340px, 52vh, 580px);
+  touch-action: none;
+}
+#dxf-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+#dxf-coords {
+  position: absolute; right: 14px; bottom: 12px;
+  font-size: 10px; letter-spacing: 0.18em;
+  color: var(--bone-faint);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+#dxf-result {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px;
+  margin-top: 22px;
+}
+#dxf-result[hidden] { display: none; }
+#dxf-result .dist-label {
+  font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--bone-faint);
+}
+#dxf-result .dist-val {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: clamp(28px, 2.4vw, 38px);
+  color: var(--ember-hot);
+  font-variant-numeric: tabular-nums;
+}
+#dxf-result .dist-coords {
+  font-size: 10px; letter-spacing: 0.14em;
+  color: var(--bone-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Footer ────────────────────────────────────────────────────── */
+#acquire { text-align: center; }
+#acquire .display { font-size: clamp(40px, 6vw, 96px); margin: 0 auto clamp(40px, 7vh, 80px); max-width: 16ch; }
+
+.cta {
+  display: inline-block;
+  appearance: none; background: none; cursor: pointer;
+  border: 1px solid var(--bone-faint);
+  border-radius: 100px;
+  padding: 20px 64px;
+  font-family: var(--font-ui);
+  font-size: 11px; font-weight: 500;
+  letter-spacing: 0.4em; text-indent: 0.4em;
+  text-transform: uppercase;
+  color: var(--bone);
+  transition: border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+.cta:hover {
+  border-color: var(--ember);
+  color: var(--ember-hot);
+  box-shadow: 0 0 44px rgba(217, 160, 91, 0.14);
+}
+
+#colophon {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  align-items: center; justify-content: space-between;
+  margin-top: clamp(100px, 16vh, 180px);
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+  font-size: 10px; letter-spacing: 0.25em; text-transform: uppercase;
+  color: var(--bone-faint);
+}
+#colophon a { color: var(--bone-dim); transition: color 0.25s ease; }
+#colophon a:hover { color: var(--ember-hot); }
+
+/* ════════════════════════════════════════════════════════════════════
+   GRAIN + CURSOR
+   ════════════════════════════════════════════════════════════════════ */
+#grain {
+  position: fixed; inset: -50%; z-index: 60;
+  pointer-events: none;
+  width: 200%; height: 200%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.045;
+  animation: grain-shift 0.9s steps(2) infinite;
+}
+@keyframes grain-shift {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(-2%, 1%); }
+  100% { transform: translate(1%, -2%); }
+}
+
+#cursor-dot, #cursor-ring {
+  position: fixed; top: 0; left: 0; z-index: 70;
+  pointer-events: none;
+  border-radius: 50%;
+  opacity: 0;
+}
+#cursor-dot {
+  width: 5px; height: 5px;
+  background: var(--ember-hot);
+  transform: translate(-50%, -50%);
+}
+#cursor-ring {
+  width: 30px; height: 30px;
+  border: 1px solid rgba(217, 160, 91, 0.55);
+  transform: translate(-50%, -50%);
+  transition: width 0.3s var(--ease-out), height 0.3s var(--ease-out);
+}
+#cursor-ring.on { width: 52px; height: 52px; }
+@media (pointer: coarse) {
+  #cursor-dot, #cursor-ring { display: none; }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   REDUCED MOTION
+   ════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  #grain { animation: none; }
+  #scroll-hint i { animation: none; }
+  #cursor-dot, #cursor-ring { display: none; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; }
+}
 </style>
 </head>
 <body>
 
-<!-- ─── HERO ──────────────────────────────────────────────────────── -->
-<div id="hero-scroll">
-  <div id="hero-sticky">
+<canvas id="c" role="img" aria-label="A torch-lit stone corridor leading to a bronze labyrinth cylinder"></canvas>
+<div id="vignette" aria-hidden="true"></div>
 
-    <!-- Grain texture -->
-    <div id="hero-grain"></div>
-
-    <!-- Image that expands on scroll -->
-    <div id="hero-image-wrap">
-      <div id="hero-image-frame">
-        <img id="hero-img" src="images/IMG_0798.jpg" alt="" draggable="false">
-      </div>
-    </div>
-
-    <!-- Intro text + arrow -->
-    <div id="hero-intro">
-      <span class="hero-label">Scroll to explore</span>
-      <h1 class="hero-title">Scroll Down</h1>
-
-      <div id="hero-arrow" onclick="window.scrollBy({top: window.innerHeight * 1.5, behavior: 'smooth'})">
-        <div id="hero-arrow-line"></div>
-        <svg id="hero-arrow-icon" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="22" cy="22" r="21" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
-          <line x1="22" y1="13" x2="22" y2="31" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
-          <polyline points="15,25 22,32 29,25" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-        </svg>
-      </div>
-    </div>
-
-    <!-- Scroll progress -->
-    <div id="scroll-progress">
-      <div class="progress-track">
-        <div class="progress-fill" id="progress-fill"></div>
-      </div>
-      <span class="progress-label" id="progress-label">000</span>
-    </div>
-
-  </div>
+<div id="preloader" aria-hidden="true">
+  <div id="load-pct">0</div>
+  <div id="load-bar"><i></i></div>
+  <span class="label">Unsealing the corridor</span>
 </div>
 
-<!-- ─── CONTENT AFTER HERO ────────────────────────────────────────── -->
-<div id="after-hero">
-  <h2 id="after-heading">Add your content here.</h2>
-  <p>This is the section revealed after the scroll transition. Replace with whatever comes next.</p>
+<header id="nav">
+  <a class="brand" href="#top">Labyrinth</a>
+</header>
+
+<div id="hero-overlay">
+  <span id="hero-label" class="label">A puzzle cast in bronze</span>
+  <h1 id="hero-title">LABYRINTH</h1>
+  <button id="enter-btn" data-cursor disabled>Enter</button>
 </div>
 
+<button id="interact-btn" data-cursor>Touch the artifact</button>
 
-<script>
-  const heroScroll  = document.getElementById('hero-scroll');
-  const heroIntro   = document.getElementById('hero-intro');
-  const heroFrame   = document.getElementById('hero-image-frame');
-  const heroImg     = document.getElementById('hero-img');
-  const progressFill= document.getElementById('progress-fill');
-  const progressLbl = document.getElementById('progress-label');
-  const afterHeading= document.getElementById('after-heading');
+<div id="veil" aria-hidden="true"></div>
 
-  // ── Easing ──────────────────────────────────────────────────────
-  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-  function lerp(a, b, t)    { return a + (b - a) * t; }
+<div id="scroll-driver" aria-hidden="true"></div>
 
-  // Custom ease: slow start, fast middle, ease out at end
-  function easeInOutQuart(t) {
-    return t < 0.5 ? 8*t*t*t*t : 1 - 8*(--t)*t*t*t;
+<main id="story">
+
+  <canvas id="maze-bg" aria-hidden="true"></canvas>
+
+  <section id="forge-intro" class="chamber" aria-labelledby="forge-h">
+    <span class="label">01 · The Forge</span>
+    <h2 id="forge-h" class="display split">Every labyrinth begins as a <em>line.</em></h2>
+    <p class="body split-p">Set the cylinder. Choose how cruel the path should be.
+    The forge unwraps the surface, carves a single winding route, and hands you
+    the plan, ready to cut in bronze, steel, or card.</p>
+  </section>
+
+  <section id="builder" class="chamber" aria-labelledby="builder-h">
+    <span class="label">02 · The Builder</span>
+    <h2 id="builder-h" class="display split">Carve your <em>own.</em></h2>
+
+    <div id="bench">
+      <form id="controls" autocomplete="off">
+        <div class="field">
+          <label for="in-d">Cylinder diameter</label>
+          <span class="field-line"><input id="in-d" type="number" value="60" min="5" step="1" inputmode="decimal"><i>mm</i></span>
+        </div>
+        <div class="field">
+          <label for="in-h">Cylinder height</label>
+          <span class="field-line"><input id="in-h" type="number" value="120" min="10" step="1" inputmode="decimal"><i>mm</i></span>
+        </div>
+        <div class="field">
+          <label for="in-s">Channel width</label>
+          <span class="field-line"><input id="in-s" type="number" value="4" min="1" step="0.5" inputmode="decimal"><i>mm</i></span>
+        </div>
+
+        <fieldset id="diff" role="radiogroup" aria-label="Difficulty">
+          <legend class="label" style="letter-spacing:0.3em">Temperament</legend>
+          <label class="diff-opt"><input type="radio" name="diff" value="gentle">
+            <span><em>i.</em> Gentle</span></label>
+          <label class="diff-opt"><input type="radio" name="diff" value="winding" checked>
+            <span><em>ii.</em> Winding</span></label>
+          <label class="diff-opt"><input type="radio" name="diff" value="merciless">
+            <span><em>iii.</em> Merciless</span></label>
+        </fieldset>
+
+        <p id="readout" aria-live="polite">Unwrapped&nbsp; 188.5 × 120.0 mm&nbsp; · &nbsp;Grid&nbsp; 23 × 14</p>
+
+        <button type="button" id="carve-btn" class="cta" data-cursor>Carve the maze</button>
+
+        <div id="plan-actions" hidden>
+          <button type="button" id="thread-btn" class="quiet" data-cursor aria-pressed="false">
+            <span class="dot" aria-hidden="true"></span>Reveal the thread</button>
+          <button type="button" id="png-btn" class="quiet" data-cursor>Keep the plan ↓</button>
+          <button type="button" id="dxf-btn" class="quiet" data-cursor>Cutting file ↓</button>
+          <button type="button" id="view-btn" class="quiet" data-cursor>Open in the drafting room ↓</button>
+        </div>
+        <p id="forge-status" class="sr-only" role="status"></p>
+      </form>
+
+      <figure id="plan">
+        <canvas id="maze-canvas" role="img" aria-label="Generated labyrinth plan: a grid of carved channels with one route from the bottom gate to the top gate"></canvas>
+        <figcaption id="plan-caption">The plan awaits its first carving</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="draft" class="chamber" aria-labelledby="draft-h">
+    <span class="label">03 · The Drafting Room</span>
+    <h2 id="draft-h" class="display split">Read the cutting <em>file.</em></h2>
+    <p class="body split-p">Every plan deserves an inspection before the blade touches
+    metal. Drop any cutting file here, or send the carved plan down from the bench:
+    pan, zoom, and measure to the hundredth of a millimetre.</p>
+
+    <div id="dxf-bench" style="margin-top: clamp(48px, 7vh, 88px);">
+      <button type="button" id="dxf-drop" data-cursor>
+        <span class="drop-title">Drop a cutting file</span>
+        <span class="drop-hint">or click to browse &nbsp;·&nbsp; line · lwpolyline · circle · arc</span>
+      </button>
+      <input type="file" id="dxf-input" accept=".dxf" hidden>
+
+      <div id="dxf-room" hidden>
+        <div id="dxf-toolbar">
+          <button type="button" id="dxf-fit" class="quiet" data-cursor>Fit</button>
+          <button type="button" id="dxf-zin" class="quiet" data-cursor aria-label="Zoom in">Closer +</button>
+          <button type="button" id="dxf-zout" class="quiet" data-cursor aria-label="Zoom out">Further −</button>
+          <button type="button" id="dxf-measure-btn" class="quiet" data-cursor aria-pressed="false">
+            <span class="dot" aria-hidden="true"></span>Measure</button>
+          <button type="button" id="dxf-clear" class="quiet" data-cursor>Clear</button>
+          <button type="button" id="dxf-eject" class="quiet" data-cursor>Eject ⏏</button>
+          <span id="dxf-info">— lines</span>
+        </div>
+        <div id="dxf-wrap">
+          <canvas id="dxf-canvas" role="img" aria-label="Cutting file viewer: pan, zoom and measure the loaded drawing"></canvas>
+          <span id="dxf-coords" aria-hidden="true">x — mm &nbsp; y — mm</span>
+        </div>
+        <div id="dxf-result" aria-live="polite" hidden>
+          <span class="dist-label">Distance</span>
+          <span class="dist-val" id="dxf-dist">—</span>
+          <span class="dist-label">mm</span>
+          <span class="dist-coords" id="dxf-dist-coords"></span>
+        </div>
+      </div>
+      <p id="draft-status" class="sr-only" role="status"></p>
+    </div>
+  </section>
+
+  <section id="acquire" class="chamber" aria-labelledby="acquire-h">
+    <span class="label">The Way Out</span>
+    <h2 id="acquire-h" class="display split">The way out is the way <em>through.</em></h2>
+    <div id="colophon">
+      <span>© 2026 Manchev Workshop</span>
+      <a href="#top" id="return-top" data-cursor>Return to the corridor ↑</a>
+    </div>
+  </section>
+
+</main>
+
+<div id="grain" aria-hidden="true"></div>
+<div id="cursor-dot" aria-hidden="true"></div>
+<div id="cursor-ring" aria-hidden="true"></div>
+
+<noscript>
+  <style>#preloader{display:none}</style>
+  <p style="position:fixed;inset:0;z-index:90;background:#0a0705;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center">
+    This experience needs JavaScript. The story below it does not: scroll on.
+  </p>
+</noscript>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader';
+
+/* ════════════════════════════════════════════════════════════════════
+   SETUP
+   ════════════════════════════════════════════════════════════════════ */
+gsap.registerPlugin(ScrollTrigger);
+
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const finePointer  = matchMedia('(pointer: fine)').matches;
+const isMobile     = innerWidth < 768;
+
+const $ = (s) => document.querySelector(s);
+
+/* ════════════════════════════════════════════════════════════════════
+   THREE — RENDERER / SCENE / CAMERA
+   ════════════════════════════════════════════════════════════════════ */
+const canvas   = $('#c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, isMobile ? 1.5 : 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace    = THREE.SRGBColorSpace;
+renderer.toneMapping         = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.65;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070c);
+scene.fog = new THREE.FogExp2(0x060402, 0.026);
+
+const EYE     = 1.72;
+const START_Z = 16.0;
+const CYL_Z   = -17.0;
+const END_Z   = CYL_Z + 3.6;   // stop an arm's length from the artifact
+
+const camera = new THREE.PerspectiveCamera(68, innerWidth / innerHeight, 0.05, 120);
+camera.position.set(0, EYE, START_Z);
+
+/* ════════════════════════════════════════════════════════════════════
+   THREE — LOADING (preloader tracks only the two corridor textures)
+   ════════════════════════════════════════════════════════════════════ */
+const manager = new THREE.LoadingManager();
+let realProgress = 0;
+manager.onProgress = (url, loaded, total) => { realProgress = loaded / total; };
+manager.onLoad     = () => { realProgress = 1; };
+
+const tl2D = new THREE.TextureLoader(manager);
+function tex(path, rS, rT) {
+  const t = tl2D.load(path);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(rS, rT);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return t;
+}
+
+const CORR_LEN = START_Z - CYL_Z + 4;
+const wallDiff  = tex('/images/opt/wall_2k.jpg',  Math.round(CORR_LEN / 1.6), 4);
+const floorDiff = tex('/images/opt/floor_2k.jpg', 4, Math.round(CORR_LEN));
+
+/* ════════════════════════════════════════════════════════════════════
+   THREE — CORRIDOR
+   ════════════════════════════════════════════════════════════════════ */
+const wallMat  = new THREE.MeshStandardMaterial({
+  map: wallDiff, roughness: 0.94, metalness: 0,
+  color: new THREE.Color(0x7a9950), envMapIntensity: 0.3,
+});
+const floorMat = new THREE.MeshStandardMaterial({
+  map: floorDiff, roughness: 0.96, metalness: 0, envMapIntensity: 0.2,
+});
+const beamMat  = new THREE.MeshStandardMaterial({ color: 0x251208, roughness: 0.95 });
+
+const W  = 4.2, H = 6.0;
+const CZ = (START_Z + CYL_Z) / 2;
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, CORR_LEN), floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.set(0, 0, CZ);
+scene.add(floor);
+
+const mkWall = (rotY, x) => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(CORR_LEN, H), wallMat);
+  m.rotation.y = rotY;
+  m.position.set(x, H / 2, CZ);
+  scene.add(m);
+};
+mkWall( Math.PI / 2, -W / 2);
+mkWall(-Math.PI / 2,  W / 2);
+
+const endWall = new THREE.Mesh(new THREE.PlaneGeometry(W, H), wallMat);
+endWall.position.set(0, H / 2, CYL_Z - 1.5);
+scene.add(endWall);
+
+// Ceiling planks with an open centre strip
+const ceilW = (W - 1.2) / 2;
+[-1, 1].forEach(side => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(ceilW, CORR_LEN), beamMat);
+  m.rotation.x = Math.PI / 2;
+  m.position.set(side * (ceilW / 2 + 0.6), H, CZ);
+  scene.add(m);
+});
+
+// Archway beams + pillars
+for (let z = START_Z + 1; z >= CYL_Z - 1; z -= 4) {
+  const tb = new THREE.Mesh(new THREE.BoxGeometry(W + 0.25, 0.22, 0.32), beamMat);
+  tb.position.set(0, H, z);
+  scene.add(tb);
+  [-1, 1].forEach(side => {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.32, H, 0.32), beamMat);
+    p.position.set(side * W / 2, H / 2, z);
+    scene.add(p);
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   THREE — LIGHTING
+   ════════════════════════════════════════════════════════════════════ */
+scene.add(new THREE.AmbientLight(0x1a2a3a, 0.25));
+const moon = new THREE.DirectionalLight(0x7090c0, 0.4);
+moon.position.set(2, 10, -5);
+scene.add(moon);
+
+const torchLights = [];
+for (let z = START_Z - 4; z >= CYL_Z + 3; z -= 5) {
+  [-1, 1].forEach((side, si) => {
+    const pl = new THREE.PointLight(0xffc864, 35, 12, 2);
+    pl.position.set(side * (W / 2 - 0.1), H * 0.68, z);
+    scene.add(pl);
+    torchLights.push({ light: pl, phase: z * 0.7 + si * 2.3 });
+
+    const flame = new THREE.Mesh(
+      new THREE.SphereGeometry(0.07, 5, 4),
+      new THREE.MeshBasicMaterial({ color: 0xffb030 })
+    );
+    flame.position.copy(pl.position);
+    scene.add(flame);
+
+    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 0.12), beamMat);
+    bracket.position.set(side * (W / 2 - 0.15), H * 0.68 - 0.3, z);
+    scene.add(bracket);
+  });
+}
+
+// Artifact glow + floor ring
+const cylGlow = new THREE.PointLight(0xffaa44, 6, 12, 2);
+cylGlow.position.set(0, 1.2, CYL_Z + 0.5);
+scene.add(cylGlow);
+
+const ring = new THREE.Mesh(
+  new THREE.RingGeometry(0.85, 1.1, 48),
+  new THREE.MeshBasicMaterial({
+    color: 0xd9a05b, transparent: true, opacity: 0.0,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  })
+);
+ring.rotation.x = -Math.PI / 2;
+ring.position.set(0, 0.02, CYL_Z);
+scene.add(ring);
+
+/* ════════════════════════════════════════════════════════════════════
+   THREE — ARTIFACT (lazy GLB) + raycast proxy
+   ════════════════════════════════════════════════════════════════════ */
+let cylMesh = null, cylLoaded = false;
+
+// Cheap invisible proxy for raycasting (never raycast the 10MB mesh)
+const proxy = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.55, 0.55, 1.7, 12),
+  new THREE.MeshBasicMaterial({ visible: false })
+);
+proxy.position.set(0, 0.85, CYL_Z);
+scene.add(proxy);
+
+new GLTFLoader().load('/images/opt/cylinder.glb', (gltf) => {
+  cylMesh = gltf.scene;
+  const box   = new THREE.Box3().setFromObject(cylMesh);
+  const size  = box.getSize(new THREE.Vector3());
+  const scale = 1.6 / size.y;
+  cylMesh.scale.setScalar(scale);
+  const box2 = new THREE.Box3().setFromObject(cylMesh);
+  cylMesh.position.set(0, -box2.min.y, CYL_Z);
+  scene.add(cylMesh);
+  cylLoaded = true;
+});
+
+/* Lazy EXR night sky: enhances when ready, never blocks */
+setTimeout(async () => {
+  try {
+    const { EXRLoader } = await import('three/addons/loaders/EXRLoader');
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    new EXRLoader().load('/images/moonless_golf_4k.exr', (exr) => {
+      exr.mapping = THREE.EquirectangularReflectionMapping;
+      scene.background  = exr;
+      scene.backgroundIntensity = 0.32;   // keep the night sky subdued
+      scene.environment = pmrem.fromEquirectangular(exr).texture;
+      pmrem.dispose();
+    });
+  } catch (e) { /* procedural sky stays */ }
+}, 2500);
+
+/* ════════════════════════════════════════════════════════════════════
+   THREE — PARTICLE FOG
+   ════════════════════════════════════════════════════════════════════ */
+const fogUniforms = { uTime: { value: 0 } };
+{
+  const COUNT = isMobile ? 120 : 220;
+  const pos = new Float32Array(COUNT * 3);
+  const sizes = new Float32Array(COUNT);
+  const off = new Float32Array(COUNT);
+  for (let i = 0; i < COUNT; i++) {
+    pos[i*3]   = (Math.random() - 0.5) * W * 0.9;
+    pos[i*3+1] = Math.random() * 1.2;
+    pos[i*3+2] = CYL_Z + Math.random() * CORR_LEN;
+    sizes[i]   = 2.5 + Math.random() * 3.5;
+    off[i]     = Math.random() * Math.PI * 2;
   }
-  function easeOutCubic(t) {
-    return 1 - Math.pow(1 - t, 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aSize',    new THREE.BufferAttribute(sizes, 1));
+  geo.setAttribute('aOffset',  new THREE.BufferAttribute(off, 1));
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: fogUniforms,
+    transparent: true, depthWrite: false,
+    vertexShader: `
+      attribute float aSize; attribute float aOffset;
+      uniform float uTime; varying float vAlpha;
+      void main() {
+        vec3 p = position;
+        p.x += sin(uTime*0.08 + aOffset)     * 0.25;
+        p.z += cos(uTime*0.06 + aOffset*1.4) * 0.20;
+        p.y += sin(uTime*0.05 + aOffset*0.8) * 0.07;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_PointSize = min(aSize * (300.0 / -mv.z), 220.0);
+        gl_Position  = projectionMatrix * mv;
+        float d = length(mv.xyz);
+        // fade far AND near, so mist never engulfs the camera
+        vAlpha = smoothstep(24.0, 5.0, d) * smoothstep(1.2, 6.0, d) * 0.2;
+      }`,
+    fragmentShader: `
+      varying float vAlpha;
+      void main() {
+        float r = length(gl_PointCoord - 0.5);
+        float soft = smoothstep(0.5, 0.12, r);
+        gl_FragColor = vec4(0.78, 0.70, 0.55, soft * vAlpha);
+      }`
+  });
+  scene.add(new THREE.Points(geo, mat));
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   STATE
+   ════════════════════════════════════════════════════════════════════ */
+const driverEl = $('#scroll-driver');
+let driverH   = driverEl.offsetHeight - innerHeight;
+let entered   = false;
+let targetZ   = START_Z, currentZ = START_Z;
+let introOff  = 2.2;             // extra pull-back before Enter
+let mouseX    = 0, mouseY = 0;
+let cylHover  = false, transitioning = false, finished = false;
+let cursorRing = null; // assigned in the cursor section below
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  driverH = driverEl.offsetHeight - innerHeight;
+});
+
+window.addEventListener('scroll', () => {
+  const prog = Math.min(Math.max(window.scrollY / driverH, 0), 1);
+  targetZ = START_Z + (END_Z - START_Z) * prog;
+}, { passive: true });
+
+window.addEventListener('pointermove', e => {
+  mouseX = (e.clientX / innerWidth  - 0.5) * 2;
+  mouseY = (e.clientY / innerHeight - 0.5) * 2;
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   PRELOADER → HERO REVEAL
+   ════════════════════════════════════════════════════════════════════ */
+// Split the title into characters for the reveal
+const titleEl = $('#hero-title');
+titleEl.innerHTML = [...titleEl.textContent]
+  .map(c => `<span class="ch" aria-hidden="true">${c}</span>`).join('');
+titleEl.setAttribute('aria-label', 'LABYRINTH');
+
+const pctEl = $('#load-pct'), barEl = $('#load-bar i');
+const displayed = { v: 0 };
+const minTime = reduceMotion ? 0 : 1.3;
+const t0 = performance.now();
+
+// setInterval (not rAF) so loading completes even in a background tab
+const loadPoll = setInterval(() => {
+  const elapsed = (performance.now() - t0) / 1000;
+  const eased   = Math.min(realProgress, elapsed / Math.max(minTime, 0.01));
+  gsap.to(displayed, {
+    v: eased * 100, duration: 0.3, ease: 'power1.out', overwrite: true,
+    onUpdate: () => {
+      pctEl.textContent = Math.round(displayed.v);
+      barEl.style.transform = `scaleX(${displayed.v / 100})`;
+    }
+  });
+  if (realProgress >= 1 && elapsed >= minTime) {
+    clearInterval(loadPoll);
+    revealHero();
+  }
+}, 90);
+
+function revealHero() {
+  pctEl.textContent = '100';
+  barEl.style.transform = 'scaleX(1)';
+  $('#enter-btn').disabled = false;
+  const tl = gsap.timeline();
+  tl.to('#preloader', { autoAlpha: 0, duration: reduceMotion ? 0.01 : 0.8, ease: 'power2.inOut' })
+    .from('#hero-title .ch', {
+      yPercent: 110, autoAlpha: 0,
+      duration: reduceMotion ? 0.01 : 1.2,
+      stagger: reduceMotion ? 0 : 0.045,
+      ease: 'expo.out',
+    }, '-=0.25')
+    .from(['#hero-label', '#enter-btn'], {
+      autoAlpha: 0, y: reduceMotion ? 0 : 24,
+      duration: reduceMotion ? 0.01 : 0.9,
+      stagger: 0.12, ease: 'expo.out',
+    }, '-=0.7');
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   ENTER
+   ════════════════════════════════════════════════════════════════════ */
+$('#enter-btn').addEventListener('click', () => {
+  if (entered) return;
+  entered = true;
+  document.documentElement.classList.remove('gate');
+  ScrollTrigger.refresh();
+  driverH = driverEl.offsetHeight - innerHeight;
+
+  gsap.to('#hero-overlay', {
+    autoAlpha: 0, duration: reduceMotion ? 0.01 : 1.0, ease: 'power2.inOut',
+    onComplete: () => $('#hero-overlay').classList.add('gone'),
+  });
+  gsap.to('#nav', { autoAlpha: 1, duration: reduceMotion ? 0.01 : 0.9, delay: 0.5 });
+
+  // step forward: ease the intro offset away
+  gsap.to({ get o() { return introOff; }, set o(v) { introOff = v; } }, {
+    o: 0, duration: reduceMotion ? 0.01 : 1.6, ease: 'power2.inOut',
+  });
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   ARTIFACT INTERACTION
+   ════════════════════════════════════════════════════════════════════ */
+const raycaster = new THREE.Raycaster();
+const pointerNDC = new THREE.Vector2();
+window.addEventListener('pointermove', e => {
+  pointerNDC.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+});
+
+function triggerDescent() {
+  if (transitioning || !cylLoaded || finished) return;
+  transitioning = true;
+  $('#interact-btn').classList.remove('visible');
+  document.documentElement.classList.add('gate');   // lock scroll during the drop
+
+  const spin = { v: 0 };
+  const dur = reduceMotion ? 0.01 : 1;
+  const tl = gsap.timeline({
+    onComplete: () => {
+      // unseal the story and land in it while veiled
+      $('#story').classList.add('open');
+      ScrollTrigger.refresh();
+      forgeInit();
+      window.scrollTo(0, driverEl.offsetHeight);
+      camera.position.y = EYE;
+      document.documentElement.classList.remove('gate');
+      transitioning = false;
+      finished = true;
+      gsap.to('#veil', { autoAlpha: 0, duration: reduceMotion ? 0.01 : 1.0, ease: 'power2.out', delay: 0.15 });
+    }
+  });
+  tl.to(spin, {
+      v: Math.PI * 2.5, duration: dur * 1.8, ease: 'power2.in',
+      onUpdate: () => { if (cylMesh) cylMesh.rotation.y = spin.v; }
+    }, 0)
+    .to(cylGlow, { intensity: 70, duration: dur * 0.9, ease: 'power2.in' }, 0)
+    .to(camera.position, { y: -3.2, duration: dur * 1.5, ease: 'power3.in' }, dur * 0.35)
+    .to('#veil', { autoAlpha: 1, duration: dur * 0.7, ease: 'power2.in' }, dur * 0.85);
+}
+
+canvas.addEventListener('click', () => { if (cylHover) triggerDescent(); });
+$('#interact-btn').addEventListener('click', triggerDescent);
+
+/* ════════════════════════════════════════════════════════════════════
+   RENDER LOOP
+   ════════════════════════════════════════════════════════════════════ */
+const lerpK = reduceMotion ? 1 : 0.06;
+let raf = 0;
+
+function animate(ms) {
+  raf = requestAnimationFrame(animate);
+  const t = ms * 0.001;
+
+  // skip rendering when the story fully covers the canvas
+  const canvasVisible = window.scrollY < driverEl.offsetHeight || transitioning;
+  if (!canvasVisible) {
+    if (cylHover || $('#interact-btn').classList.contains('visible')) {
+      cylHover = false;
+      $('#interact-btn').classList.remove('visible');
+      cursorRing?.classList.remove('on');
+      canvas.style.cursor = 'default';
+    }
+    return;
   }
 
-  // ── Subtle image parallax on mouse ──────────────────────────────
-  let mouseX = 0, mouseY = 0;
-  let imgOffX = 0, imgOffY = 0;
-  const PARALLAX_STRENGTH = 12; // px max shift
+  currentZ += (targetZ - currentZ) * lerpK;
+  camera.position.z = currentZ + introOff;
 
-  document.addEventListener('mousemove', e => {
-    mouseX = (e.clientX / window.innerWidth  - 0.5) * 2; // -1 to 1
-    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  if (!reduceMotion) {
+    camera.rotation.y = -mouseX * 0.03;
+    camera.rotation.x =  mouseY * 0.015;
+    camera.position.x =  mouseX * 0.12;
+  }
+  if (!transitioning) camera.position.y = EYE;
+
+  for (const { light, phase } of torchLights) {
+    light.intensity = 35
+      + Math.sin(t * 9.1  + phase)       * 6
+      + Math.sin(t * 17.3 + phase * 1.7) * 4
+      + Math.sin(t * 31.7 + phase * 0.9) * 2;
+  }
+
+  // artifact idle + proximity
+  if (cylMesh && !transitioning) {
+    cylMesh.rotation.y += reduceMotion ? 0 : 0.003;
+    const near = camera.position.z - CYL_Z < 9;
+    const basePulse = 6 + Math.sin(t * 1.8) * 2;
+
+    if (near && entered && !finished) {
+      raycaster.setFromCamera(pointerNDC, camera);
+      cylHover = raycaster.intersectObject(proxy).length > 0;
+      $('#interact-btn').classList.toggle('visible', cylLoaded);
+      ring.material.opacity = 0.18 + Math.sin(t * 2.2) * 0.08;
+      cylGlow.intensity = cylHover ? 18 + Math.sin(t * 5) * 4 : basePulse;
+      canvas.style.cursor = cylHover ? 'pointer' : 'default';
+      cursorRing?.classList.toggle('on', cylHover);
+    } else {
+      cylHover = false;
+      $('#interact-btn').classList.remove('visible');
+      ring.material.opacity = Math.max(0, ring.material.opacity - 0.01);
+      cylGlow.intensity = basePulse;
+      canvas.style.cursor = 'default';
+    }
+  }
+
+  if (!reduceMotion) fogUniforms.uTime.value = t;
+  renderer.render(scene, camera);
+}
+animate(0);
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) cancelAnimationFrame(raf);
+  else raf = requestAnimationFrame(animate);
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   GSAP — STORY CHOREOGRAPHY
+   ════════════════════════════════════════════════════════════════════ */
+// split display headings into words
+document.querySelectorAll('.split').forEach(el => {
+  el.innerHTML = el.innerHTML.trim().split(/\s+/).map(w =>
+    `<span class="w"><i>${w}</i></span>`).join(' ');
+});
+
+const mm = gsap.matchMedia();
+mm.add('(prefers-reduced-motion: no-preference)', () => {
+
+  document.querySelectorAll('.split').forEach(el => {
+    gsap.from(el.querySelectorAll('.w > i'), {
+      yPercent: 115, duration: 1.1, stagger: 0.07, ease: 'expo.out',
+      scrollTrigger: { trigger: el, start: 'top 82%' },
+    });
   });
 
-  // ── Scroll handler ───────────────────────────────────────────────
-  let ticking = false;
+  document.querySelectorAll('.split-p, .chamber .label').forEach(el => {
+    gsap.from(el, {
+      autoAlpha: 0, y: 28, duration: 1.0, ease: 'expo.out',
+      scrollTrigger: { trigger: el, start: 'top 88%' },
+    });
+  });
 
-  function update() {
-    const scrollH   = heroScroll.offsetHeight - window.innerHeight;
-    const rawProg   = clamp(window.scrollY / scrollH, 0, 1);
+  gsap.from('#bench', {
+    autoAlpha: 0, y: 44, duration: 1.1, ease: 'expo.out',
+    scrollTrigger: { trigger: '#bench', start: 'top 85%' },
+  });
 
-    // ── Intro fade (0 → 0.28 of scroll range) ──────────────────
-    const introFade = clamp(rawProg / 0.28, 0, 1);
-    heroIntro.style.opacity  = 1 - introFade;
-    heroIntro.style.transform = `translateY(${-introFade * 20}px)`;
+  gsap.from('#dxf-bench', {
+    autoAlpha: 0, y: 44, duration: 1.1, ease: 'expo.out',
+    scrollTrigger: { trigger: '#dxf-bench', start: 'top 85%' },
+  });
 
-    // ── Image reveal ────────────────────────────────────────────
-    // Starts at progress 0.03, fully expanded by 0.9
-    const imgStart    = 0.03;
-    const imgEnd      = 0.9;
-    const imgProgress = clamp((rawProg - imgStart) / (imgEnd - imgStart), 0, 1);
-    const easedImg    = easeInOutQuart(imgProgress);
+  gsap.from('#colophon', {
+    autoAlpha: 0, duration: 1.2, ease: 'power2.out',
+    scrollTrigger: { trigger: '#colophon', start: 'top 95%' },
+  });
+});
 
-    // Scale: from 0.12 (small box in center) to 1 (fills viewport)
-    const scale  = lerp(0.12, 1.0, easedImg);
-    // Border radius: from 28px to 0
-    const radius = lerp(28, 0, easeOutCubic(imgProgress));
-    // Opacity: snap in quickly then stay at 1
-    const opacity= clamp(rawProg / 0.08, 0, 1);
+// nav anchors: native smooth scroll
+document.querySelectorAll('#nav a, #return-top').forEach(a => {
+  a.addEventListener('click', e => {
+    const href = a.getAttribute('href');
+    if (!href.startsWith('#')) return;
+    e.preventDefault();
+    if (href === '#top') {
+      window.scrollTo({ top: 0, behavior: reduceMotion ? 'instant' : 'smooth' });
+    } else {
+      document.querySelector(href)?.scrollIntoView({ behavior: reduceMotion ? 'instant' : 'smooth' });
+    }
+  });
+});
 
-    // Subtle image parallax counter-move (feels like the image floats)
-    // Dampen parallax as scale increases (full-screen image shouldn't parallax)
-    const parallaxFactor = 1 - easedImg;
-    imgOffX += (mouseX * PARALLAX_STRENGTH * parallaxFactor - imgOffX) * 0.06;
-    imgOffY += (mouseY * PARALLAX_STRENGTH * parallaxFactor - imgOffY) * 0.06;
+/* ════════════════════════════════════════════════════════════════════
+   THE FORGE — maze builder
+   Unwraps a cylinder (π·d × h), carves a perfect maze, exports PNG/DXF.
+   The carve replays its own algorithm steps as the drawing animation.
+   ════════════════════════════════════════════════════════════════════ */
+const elD = $('#in-d'), elH = $('#in-h'), elS = $('#in-s');
+const readoutEl = $('#readout'), planCap = $('#plan-caption');
+const mazeCanvas = $('#maze-canvas');
+const mctx = mazeCanvas.getContext('2d');
+const forgeStatus = $('#forge-status');
+const DIRS = [[-1,0],[0,1],[1,0],[0,-1]];   // top, right, bottom, left
 
-    heroFrame.style.transform     = `scale(${scale})`;
-    heroFrame.style.borderRadius  = `${radius}px`;
-    heroFrame.style.opacity       = opacity;
-    heroImg.style.transform       = `translate(${imgOffX}px, ${imgOffY}px) scale(1.04)`;
+const forge = {
+  cols: 0, rows: 0, wmm: 0, hmm: 0,
+  steps: [], applied: 0,
+  startCol: 0, finishCol: 0,
+  solution: null, thread: 0, carved: false,
+};
 
-    // ── Progress bar ────────────────────────────────────────────
-    const pct = Math.round(rawProg * 100);
-    progressFill.style.width = pct + '%';
-    progressLbl.textContent  = String(pct).padStart(3, '0');
+function calcForge() {
+  const d = parseFloat(elD.value), h = parseFloat(elH.value), s = parseFloat(elS.value);
+  if (!(d > 0) || !(h > 0) || !(s > 0)) {
+    readoutEl.textContent = 'Set diameter, height and channel width.';
+    return false;
+  }
+  forge.wmm = Math.PI * d;
+  forge.hmm = h;
+  forge.cols = Math.max(3, Math.floor((forge.wmm / s - 1) / 2));
+  forge.rows = Math.max(3, Math.floor((forge.hmm / s - 1) / 2));
+  readoutEl.innerHTML =
+    `Unwrapped&nbsp; ${forge.wmm.toFixed(1)} × ${forge.hmm.toFixed(1)} mm` +
+    `&nbsp; · &nbsp;Grid&nbsp; ${forge.cols} × ${forge.rows}`;
+  return true;
+}
+[elD, elH, elS].forEach(el => el.addEventListener('input', () => calcForge()));
 
-    // ── Fade progress bar out as image fills ─────────────────
-    const progressBar = document.getElementById('scroll-progress');
-    progressBar.style.opacity = 1 - clamp((rawProg - 0.7) / 0.2, 0, 1);
+/* ── carve algorithms (perfect mazes, steps recorded for the animation) ── */
+function carveAlgo(kind) {
+  const { rows, cols } = forge;
+  const v = Array.from({ length: rows }, () => new Array(cols).fill(false));
+  const steps = [];
+  const open = (r, c, di) => {
+    const nr = r + DIRS[di][0], nc = c + DIRS[di][1];
+    v[nr][nc] = true;
+    steps.push([r, c, di]);
+    return [nr, nc];
+  };
+  const shuffled = () => [0,1,2,3].sort(() => Math.random() - 0.5);
+  const inb = (r, c) => r >= 0 && r < rows && c >= 0 && c < cols;
 
-    ticking = false;
+  v[rows-1][forge.startCol] = true;
+
+  if (kind === 'merciless') {                 // Prim's: scattered, branchy
+    const frontier = [];
+    const addF = (r, c) => { for (let di = 0; di < 4; di++) {
+      const nr = r + DIRS[di][0], nc = c + DIRS[di][1];
+      if (inb(nr, nc) && !v[nr][nc]) frontier.push([nr, nc, r, c, (di + 2) % 4]);
+    }};
+    addF(rows - 1, forge.startCol);
+    while (frontier.length) {
+      const i = Math.floor(Math.random() * frontier.length);
+      const [r, c, fr, fc, fdi] = frontier.splice(i, 1)[0];
+      if (v[r][c]) continue;
+      open(fr, fc, (fdi + 2) % 4);
+      addF(r, c);
+    }
+  } else {                                    // DFS (gentle) / hybrid (winding)
+    const stack = [[rows-1, forge.startCol]];
+    while (stack.length) {
+      const idx = (kind === 'winding' && Math.random() >= 0.55)
+        ? Math.floor(Math.random() * stack.length)
+        : stack.length - 1;
+      const [r, c] = stack[idx];
+      let moved = false;
+      for (const di of shuffled()) {
+        const nr = r + DIRS[di][0], nc = c + DIRS[di][1];
+        if (inb(nr, nc) && !v[nr][nc]) {
+          open(r, c, di);
+          stack.push([nr, nc]);
+          moved = true;
+          break;
+        }
+      }
+      if (!moved) stack.splice(idx, 1);
+    }
+  }
+  forge.steps = steps;
+  forge.solution = solveForge();
+}
+
+/* walls state after the first n carve steps (gates open when complete) */
+function wallsAt(n) {
+  const { rows, cols, steps } = forge;
+  const W = Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => [true, true, true, true]));
+  for (let i = 0; i < n; i++) {
+    const [r, c, di] = steps[i];
+    W[r][c][di] = false;
+    W[r + DIRS[di][0]][c + DIRS[di][1]][(di + 2) % 4] = false;
+  }
+  if (n >= steps.length && steps.length) {
+    W[rows-1][forge.startCol][2] = false;   // entry gate
+    W[0][forge.finishCol][0] = false;       // exit gate
+  }
+  return W;
+}
+
+function solveForge() {
+  const { rows, cols } = forge;
+  const W = wallsAt(forge.steps.length);
+  const visited = Array.from({ length: rows }, () => new Array(cols).fill(false));
+  const prev    = Array.from({ length: rows }, () => new Array(cols).fill(null));
+  const q = [[rows-1, forge.startCol]];
+  visited[rows-1][forge.startCol] = true;
+  while (q.length) {
+    const [r, c] = q.shift();
+    if (r === 0 && c === forge.finishCol) break;
+    for (let di = 0; di < 4; di++) {
+      if (W[r][c][di]) continue;
+      const nr = r + DIRS[di][0], nc = c + DIRS[di][1];
+      if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !visited[nr][nc]) {
+        visited[nr][nc] = true;
+        prev[nr][nc] = [r, c];
+        q.push([nr, nc]);
+      }
+    }
+  }
+  const path = [];
+  let cur = [0, forge.finishCol];
+  while (cur) { path.unshift(cur); cur = prev[cur[0]][cur[1]]; }
+  return path;
+}
+
+/* ── renderer ─────────────────────────────────────────────────────── */
+function renderPlan() {
+  const { rows, cols } = forge;
+  if (!rows || !mazeCanvas.parentElement) return;
+  const cw = mazeCanvas.parentElement.clientWidth;
+  if (!cw) return;                            // story still sealed
+  const cell = cw / cols;
+  const ch = cell * rows;
+  const dpr = Math.min(devicePixelRatio, 2);
+  mazeCanvas.width  = Math.round(cw * dpr);
+  mazeCanvas.height = Math.round(ch * dpr);
+  mazeCanvas.style.height = ch + 'px';
+  mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  mctx.clearRect(0, 0, cw, ch);
+
+  const W = wallsAt(forge.applied);
+  mctx.strokeStyle = 'rgba(232, 221, 204, 0.78)';
+  mctx.lineWidth = Math.max(1, Math.min(2, cell * 0.08));
+  mctx.lineCap = 'square';
+  mctx.beginPath();
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = c * cell, y = r * cell;
+      if (W[r][c][0]) { mctx.moveTo(x, y);            mctx.lineTo(x + cell, y); }
+      if (W[r][c][3]) { mctx.moveTo(x, y);            mctx.lineTo(x, y + cell); }
+      if (r === rows - 1 && W[r][c][2]) { mctx.moveTo(x, y + cell); mctx.lineTo(x + cell, y + cell); }
+      if (c === cols - 1 && W[r][c][1]) { mctx.moveTo(x + cell, y); mctx.lineTo(x + cell, y + cell); }
+    }
+  }
+  mctx.stroke();
+
+  /* Ariadne's thread */
+  if (forge.thread > 0 && forge.solution) {
+    const pts = [];
+    const sc = forge.startCol;
+    pts.push([(sc + 0.5) * cell, rows * cell + cell * 0.45]);   // below the entry gate
+    for (let i = forge.solution.length - 1; i >= 0; i--) {
+      const [r, c] = forge.solution[i];
+      pts.push([(c + 0.5) * cell, (r + 0.5) * cell]);
+    }
+    pts.push([(forge.finishCol + 0.5) * cell, -cell * 0.45]);   // past the exit gate
+
+    let total = 0;
+    const lens = [];
+    for (let i = 1; i < pts.length; i++) {
+      const L = Math.hypot(pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]);
+      lens.push(L); total += L;
+    }
+    let remain = total * forge.thread;
+    mctx.strokeStyle = '#d9a05b';
+    mctx.lineWidth = Math.max(1.5, cell * 0.16);
+    mctx.lineCap = 'round';
+    mctx.lineJoin = 'round';
+    mctx.shadowColor = 'rgba(217, 160, 91, 0.55)';
+    mctx.shadowBlur = 10;
+    mctx.beginPath();
+    mctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length && remain > 0; i++) {
+      const L = lens[i-1];
+      if (remain >= L) { mctx.lineTo(pts[i][0], pts[i][1]); remain -= L; }
+      else {
+        const t = remain / L;
+        mctx.lineTo(pts[i-1][0] + (pts[i][0] - pts[i-1][0]) * t,
+                    pts[i-1][1] + (pts[i][1] - pts[i-1][1]) * t);
+        remain = 0;
+      }
+    }
+    mctx.stroke();
+    mctx.shadowBlur = 0;
+  }
+}
+
+/* ── carve action ─────────────────────────────────────────────────── */
+let carveTween = null, threadTween = null;
+const threadBtn = $('#thread-btn');
+
+function doCarve() {
+  if (!calcForge()) return;
+  forge.startCol  = Math.floor(forge.cols / 2);
+  forge.finishCol = Math.floor(forge.cols / 2);
+  const kind = document.querySelector('input[name="diff"]:checked').value;
+  carveAlgo(kind);
+  forge.carved = true;
+  forge.thread = 0;
+  threadBtn.setAttribute('aria-pressed', 'false');
+  $('#plan-actions').hidden = false;
+  planCap.textContent = `The plan · ${forge.cols} × ${forge.rows} · one way through`;
+  mazeCanvas.setAttribute('aria-label',
+    `Labyrinth plan, ${forge.cols} by ${forge.rows} cells, one route from the bottom gate to the top gate`);
+  forgeStatus.textContent = `Maze carved: ${forge.cols} by ${forge.rows} cells, single route, no loops.`;
+  $('#carve-btn').textContent = 'Carve another';
+
+  carveTween?.kill(); threadTween?.kill();
+  if (reduceMotion) {
+    forge.applied = forge.steps.length;
+    renderPlan();
+  } else {
+    const proxy = { p: 0 };
+    forge.applied = 0;
+    carveTween = gsap.to(proxy, {
+      p: 1, duration: 1.7, ease: 'power2.inOut',
+      onUpdate: () => {
+        forge.applied = Math.round(proxy.p * forge.steps.length);
+        renderPlan();
+      },
+    });
+  }
+}
+
+$('#carve-btn').addEventListener('click', doCarve);
+$('#controls').addEventListener('submit', e => { e.preventDefault(); doCarve(); });
+
+threadBtn.addEventListener('click', () => {
+  if (!forge.carved) return;
+  const on = threadBtn.getAttribute('aria-pressed') !== 'true';
+  threadBtn.setAttribute('aria-pressed', String(on));
+  threadTween?.kill();
+  if (reduceMotion) { forge.thread = on ? 1 : 0; renderPlan(); return; }
+  threadTween = gsap.to(forge, {
+    thread: on ? 1 : 0,
+    duration: on ? 1.2 : 0.45,
+    ease: on ? 'power2.out' : 'power2.in',
+    onUpdate: renderPlan,
+  });
+});
+
+/* ── exports ──────────────────────────────────────────────────────── */
+$('#png-btn').addEventListener('click', () => {
+  if (!forge.carved) return;
+  const { rows, cols } = forge;
+  const unit = Math.min(40, Math.max(10, Math.floor(2400 / cols)));
+  const pad  = unit;
+  const off  = document.createElement('canvas');
+  off.width  = cols * unit + pad * 2;
+  off.height = rows * unit + pad * 2;
+  const ox = off.getContext('2d');
+  ox.fillStyle = '#0a0705';
+  ox.fillRect(0, 0, off.width, off.height);
+  ox.translate(pad, pad);
+  const W = wallsAt(forge.steps.length);
+  ox.strokeStyle = '#e8ddcc';
+  ox.lineWidth = Math.max(2, unit * 0.12);
+  ox.lineCap = 'square';
+  ox.beginPath();
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const x = c * unit, y = r * unit;
+    if (W[r][c][0]) { ox.moveTo(x, y); ox.lineTo(x + unit, y); }
+    if (W[r][c][3]) { ox.moveTo(x, y); ox.lineTo(x, y + unit); }
+    if (r === rows - 1 && W[r][c][2]) { ox.moveTo(x, y + unit); ox.lineTo(x + unit, y + unit); }
+    if (c === cols - 1 && W[r][c][1]) { ox.moveTo(x + unit, y); ox.lineTo(x + unit, y + unit); }
+  }
+  ox.stroke();
+  const a = document.createElement('a');
+  a.download = `labyrinth-${cols}x${rows}.png`;
+  a.href = off.toDataURL('image/png');
+  a.click();
+  forgeStatus.textContent = 'Plan saved as PNG.';
+});
+
+function buildForgeDXF() {
+  const { rows, cols } = forge;
+  const S = parseFloat(elS.value) || 10;
+  const totalC = 2 * cols + 1, totalR = 2 * rows + 3;
+  const W = wallsAt(forge.steps.length);
+
+  // corridor-cell set in the doubled grid (walls become the solid between)
+  const path = new Set();
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const gr = 2 * r + 2, gc = 2 * c + 1;
+    path.add(gr + ',' + gc);
+    if (!W[r][c][0] && r > 0)        path.add((gr - 1) + ',' + gc);
+    if (!W[r][c][1])                 path.add(gr + ',' + (gc + 1));
+    if (!W[r][c][2] && r < rows - 1) path.add((gr + 1) + ',' + gc);
+    if (!W[r][c][3])                 path.add(gr + ',' + (gc - 1));
+  }
+  path.add((2 * rows + 1) + ',' + (2 * forge.startCol + 1));
+  path.add((2 * rows + 2) + ',' + (2 * forge.startCol + 1));
+  path.add('1,' + (2 * forge.finishCol + 1));
+  path.add('0,' + (2 * forge.finishCol + 1));
+
+  const lineSet = new Map();
+  const toY = gr => (totalR - 1 - gr) * S;
+  const hline = (y, x1, x2) => lineSet.set(`H,${y.toFixed(4)},${x1.toFixed(4)},${x2.toFixed(4)}`, { x1, y1: y, x2, y2: y });
+  const vline = (x, y1, y2) => lineSet.set(`V,${x.toFixed(4)},${y1.toFixed(4)},${y2.toFixed(4)}`, { x1: x, y1, x2: x, y2 });
+  for (let gr = 0; gr < totalR; gr++) for (let gc = 0; gc < totalC; gc++) {
+    if (!path.has(gr + ',' + gc)) continue;
+    const x1 = gc * S, x2 = (gc + 1) * S;
+    const yb = toY(gr), yt = toY(gr) + S;
+    if (!path.has(gr + ',' + (gc - 1))) vline(x1, yb, yt);
+    if (!path.has(gr + ',' + (gc + 1))) vline(x2, yb, yt);
+    if (!path.has((gr - 1) + ',' + gc)) hline(yt, x1, x2);
+    if (!path.has((gr + 1) + ',' + gc)) hline(yb, x1, x2);
+  }
+  const entities = [...lineSet.values()].map(({ x1, y1, x2, y2 }) =>
+    `0\nLINE\n8\nMAZE\n10\n${x1.toFixed(6)}\n20\n${y1.toFixed(6)}\n30\n0.0\n11\n${x2.toFixed(6)}\n21\n${y2.toFixed(6)}\n31\n0.0`);
+  return `0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1015\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n` +
+    `0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n1\n` +
+    `0\nLAYER\n2\nMAZE\n70\n0\n62\n7\n6\nCONTINUOUS\n0\nENDTAB\n0\nENDSEC\n` +
+    `0\nSECTION\n2\nENTITIES\n${entities.join('\n')}\n0\nENDSEC\n0\nEOF`;
+}
+
+$('#dxf-btn').addEventListener('click', () => {
+  if (!forge.carved) return;
+  const dxf = buildForgeDXF();
+  const blob = new Blob([dxf], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.download = `labyrinth-${forge.cols}x${forge.rows}.dxf`;
+  a.href = url;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  forgeStatus.textContent = 'Cutting file saved as DXF, millimetre units.';
+});
+
+$('#view-btn').addEventListener('click', () => {
+  if (!forge.carved) return;
+  draftLoadText(buildForgeDXF(), `labyrinth-${forge.cols}x${forge.rows}.dxf`);
+  $('#draft').scrollIntoView({ behavior: reduceMotion ? 'instant' : 'smooth', block: 'start' });
+  forgeStatus.textContent = 'Plan opened in the drafting room below.';
+});
+
+/* first draw: the uncarved grid appears once the story is unsealed */
+function forgeInit() {
+  if (calcForge()) { forge.applied = 0; forge.steps = []; renderPlan(); }
+}
+window.addEventListener('resize', () => {
+  if ($('#story').classList.contains('open')) renderPlan();
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   THE DRAFTING ROOM — DXF viewer
+   Parses LINE / LWPOLYLINE / CIRCLE / ARC into segments; pan, zoom,
+   pinch, and a measure tool with endpoint/midpoint/nearest snapping.
+   ════════════════════════════════════════════════════════════════════ */
+const dxfCvs = $('#dxf-canvas');
+const dxfCtx = dxfCvs.getContext('2d');
+const dxfCoordsEl = $('#dxf-coords');
+let dxfLines = [], dxfBounds = null;
+const dxfView = { cx: 0, cy: 0, scale: 1 };
+let dxfCW = 0, dxfCH = 0;
+let dxfPanning = false, dxfPanLast = { x: 0, y: 0 };
+let dxfMeasuring = false, dxfPts = [], dxfSnap = null;
+const dxfPinch = { dist: 0, cx: 0, cy: 0, scale: 1, vcx: 0, vcy: 0 };
+
+function dxfResize() {
+  const wrap = $('#dxf-wrap');
+  dxfCW = wrap.clientWidth || 800;
+  dxfCH = wrap.clientHeight || 420;
+  const dpr = Math.min(devicePixelRatio, 2);
+  dxfCvs.width  = Math.round(dxfCW * dpr);
+  dxfCvs.height = Math.round(dxfCH * dpr);
+  dxfCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function dxfParse(text) {
+  const raw = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const pairs = [];
+  for (let i = 0; i + 1 < raw.length; i += 2) {
+    const code = parseInt(raw[i].trim(), 10);
+    if (!isNaN(code)) pairs.push([code, raw[i + 1].trim()]);
+  }
+  dxfLines = [];
+  let inEnt = false, i = 0;
+  while (i < pairs.length) {
+    const [code, val] = pairs[i];
+    if (code === 0 && val === 'SECTION') {
+      i++;
+      if (i < pairs.length && pairs[i][0] === 2 && pairs[i][1] === 'ENTITIES') inEnt = true;
+      continue;
+    }
+    if (code === 0 && val === 'ENDSEC') { inEnt = false; i++; continue; }
+    if (!inEnt) { i++; continue; }
+
+    if (code === 0 && val === 'LINE') {
+      i++;
+      let x1, y1, x2, y2;
+      while (i < pairs.length && pairs[i][0] !== 0) {
+        const [c, v] = pairs[i];
+        if (c === 10) x1 = +v; if (c === 20) y1 = +v;
+        if (c === 11) x2 = +v; if (c === 21) y2 = +v;
+        i++;
+      }
+      if (x1 != null && y1 != null && x2 != null && y2 != null) dxfLines.push({ x1, y1, x2, y2 });
+      continue;
+    }
+    if (code === 0 && val === 'LWPOLYLINE') {
+      i++;
+      let closed = false;
+      const pts = [];
+      while (i < pairs.length && pairs[i][0] !== 0) {
+        const [c, v] = pairs[i];
+        if (c === 70) closed = !!(parseInt(v, 10) & 1);
+        if (c === 10) pts.push([+v, 0]);
+        if (c === 20 && pts.length) pts[pts.length - 1][1] = +v;
+        i++;
+      }
+      for (let k = 0; k < pts.length - 1; k++)
+        dxfLines.push({ x1: pts[k][0], y1: pts[k][1], x2: pts[k + 1][0], y2: pts[k + 1][1] });
+      if (closed && pts.length >= 3)
+        dxfLines.push({ x1: pts[pts.length - 1][0], y1: pts[pts.length - 1][1], x2: pts[0][0], y2: pts[0][1] });
+      continue;
+    }
+    if (code === 0 && val === 'CIRCLE') {
+      i++;
+      let cx = 0, cy = 0, r = 1;
+      while (i < pairs.length && pairs[i][0] !== 0) {
+        const [c, v] = pairs[i];
+        if (c === 10) cx = +v; if (c === 20) cy = +v; if (c === 40) r = +v;
+        i++;
+      }
+      for (let k = 0; k < 64; k++) {
+        const a1 = (k / 64) * 2 * Math.PI, a2 = ((k + 1) / 64) * 2 * Math.PI;
+        dxfLines.push({ x1: cx + r * Math.cos(a1), y1: cy + r * Math.sin(a1),
+                        x2: cx + r * Math.cos(a2), y2: cy + r * Math.sin(a2) });
+      }
+      continue;
+    }
+    if (code === 0 && val === 'ARC') {
+      i++;
+      let cx = 0, cy = 0, r = 1, sa = 0, ea = 360;
+      while (i < pairs.length && pairs[i][0] !== 0) {
+        const [c, v] = pairs[i];
+        if (c === 10) cx = +v; if (c === 20) cy = +v; if (c === 40) r = +v;
+        if (c === 50) sa = +v; if (c === 51) ea = +v;
+        i++;
+      }
+      let a1 = sa * Math.PI / 180, a2 = ea * Math.PI / 180;
+      if (a2 <= a1) a2 += 2 * Math.PI;
+      const span = a2 - a1;
+      const N = Math.max(16, Math.ceil(span / (Math.PI / 32)));
+      for (let k = 0; k < N; k++) {
+        const t1 = a1 + (k / N) * span, t2 = a1 + ((k + 1) / N) * span;
+        dxfLines.push({ x1: cx + r * Math.cos(t1), y1: cy + r * Math.sin(t1),
+                        x2: cx + r * Math.cos(t2), y2: cy + r * Math.sin(t2) });
+      }
+      continue;
+    }
+    i++;
   }
 
-  window.addEventListener('scroll', () => {
-    if (!ticking) { requestAnimationFrame(update); ticking = true; }
+  if (!dxfLines.length) { dxfBounds = null; return 0; }
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const { x1, y1, x2, y2 } of dxfLines) {
+    if (x1 < minX) minX = x1; if (x1 > maxX) maxX = x1;
+    if (x2 < minX) minX = x2; if (x2 > maxX) maxX = x2;
+    if (y1 < minY) minY = y1; if (y1 > maxY) maxY = y1;
+    if (y2 < minY) minY = y2; if (y2 > maxY) maxY = y2;
+  }
+  dxfBounds = { minX, maxX, minY, maxY };
+  return dxfLines.length;
+}
+
+/* world ↔ screen (y up in drawing space) */
+const dxfW2S = (wx, wy) => [ (wx - dxfView.cx) * dxfView.scale + dxfCW / 2,
+                            -(wy - dxfView.cy) * dxfView.scale + dxfCH / 2 ];
+const dxfS2W = (sx, sy) => [ (sx - dxfCW / 2) / dxfView.scale + dxfView.cx,
+                            -(sy - dxfCH / 2) / dxfView.scale + dxfView.cy ];
+
+/* snap priority: endpoint > midpoint > nearest-on-line, 16px radius */
+function dxfSnapTo(sx, sy) {
+  if (!dxfLines.length) return null;
+  const SNAP2 = 16 * 16;
+  let bestD = Infinity, bestPt = null, bestType = null;
+  for (const { x1, y1, x2, y2 } of dxfLines) {
+    for (const [px, py] of [[x1, y1], [x2, y2]]) {
+      const [ax, ay] = dxfW2S(px, py);
+      const d = (sx - ax) ** 2 + (sy - ay) ** 2;
+      if (d < SNAP2 && d < bestD) { bestD = d; bestPt = { x: px, y: py }; bestType = 'endpoint'; }
+    }
+  }
+  if (bestType) return { type: bestType, ...bestPt };
+  for (const { x1, y1, x2, y2 } of dxfLines) {
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const [ax, ay] = dxfW2S(mx, my);
+    const d = (sx - ax) ** 2 + (sy - ay) ** 2;
+    if (d < SNAP2 && d < bestD) { bestD = d; bestPt = { x: mx, y: my }; bestType = 'midpoint'; }
+  }
+  if (bestType) return { type: bestType, ...bestPt };
+  for (const { x1, y1, x2, y2 } of dxfLines) {
+    const [ax, ay] = dxfW2S(x1, y1);
+    const [bx, by] = dxfW2S(x2, y2);
+    const ex = bx - ax, ey = by - ay;
+    const len2 = ex * ex + ey * ey;
+    if (len2 < 0.1) continue;
+    const t = Math.max(0, Math.min(1, ((sx - ax) * ex + (sy - ay) * ey) / len2));
+    const px = ax + t * ex, py = ay + t * ey;
+    const d = (sx - px) ** 2 + (sy - py) ** 2;
+    if (d < SNAP2 && d < bestD) {
+      bestD = d;
+      const [wx, wy] = dxfS2W(px, py);
+      bestPt = { x: wx, y: wy }; bestType = 'line';
+    }
+  }
+  return bestPt ? { type: bestType, ...bestPt } : null;
+}
+
+/* adaptive mm grid at a nice 1/2/5 pitch */
+function dxfDrawGrid() {
+  if (dxfView.scale < 0.3) return;
+  const worldSpan = 80 / dxfView.scale;
+  const exp = Math.floor(Math.log10(worldSpan));
+  const frac = worldSpan / Math.pow(10, exp);
+  const nice = frac < 1.5 ? 1 : frac < 3.5 ? 2 : frac < 7.5 ? 5 : 10;
+  const gs = nice * Math.pow(10, exp);
+  if (!isFinite(gs) || gs <= 0) return;
+  const [wx0, wy0] = dxfS2W(0, dxfCH);
+  const [wx1, wy1] = dxfS2W(dxfCW, 0);
+  const x0 = Math.floor(wx0 / gs) * gs, x1 = Math.ceil(wx1 / gs) * gs;
+  const y0 = Math.floor(wy0 / gs) * gs, y1 = Math.ceil(wy1 / gs) * gs;
+
+  dxfCtx.strokeStyle = 'rgba(232, 221, 204, 0.05)';
+  dxfCtx.lineWidth = 1;
+  dxfCtx.beginPath();
+  for (let x = x0; x <= x1; x += gs) { const [sx] = dxfW2S(x, 0); dxfCtx.moveTo(sx, 0); dxfCtx.lineTo(sx, dxfCH); }
+  for (let y = y0; y <= y1; y += gs) { const [, sy] = dxfW2S(0, y); dxfCtx.moveTo(0, sy); dxfCtx.lineTo(dxfCW, sy); }
+  dxfCtx.stroke();
+
+  if (dxfView.scale > 0.6) {
+    dxfCtx.fillStyle = 'rgba(232, 221, 204, 0.25)';
+    dxfCtx.font = '10px "Space Grotesk", monospace';
+    dxfCtx.textAlign = 'left';
+    for (let x = x0; x <= x1; x += gs) {
+      const [sx] = dxfW2S(x, 0);
+      if (sx > 4 && sx < dxfCW - 4) dxfCtx.fillText(gs < 1 ? x.toFixed(1) : Math.round(x), sx + 3, dxfCH - 6);
+    }
+    for (let y = y0; y <= y1; y += gs) {
+      const [, sy] = dxfW2S(0, y);
+      if (sy > 14 && sy < dxfCH - 4) dxfCtx.fillText(gs < 1 ? y.toFixed(1) : Math.round(y), 4, sy - 4);
+    }
+  }
+}
+
+function dxfRedraw() {
+  if (!dxfCtx) return;
+  dxfCtx.clearRect(0, 0, dxfCW, dxfCH);
+  if (!dxfLines.length) return;
+
+  dxfDrawGrid();
+
+  dxfCtx.strokeStyle = 'rgba(232, 221, 204, 0.85)';
+  dxfCtx.lineWidth = 1;
+  dxfCtx.beginPath();
+  for (const { x1, y1, x2, y2 } of dxfLines) {
+    const [sx1, sy1] = dxfW2S(x1, y1);
+    const [sx2, sy2] = dxfW2S(x2, y2);
+    if (sx1 < -2 && sx2 < -2) continue;
+    if (sx1 > dxfCW + 2 && sx2 > dxfCW + 2) continue;
+    if (sy1 < -2 && sy2 < -2) continue;
+    if (sy1 > dxfCH + 2 && sy2 > dxfCH + 2) continue;
+    dxfCtx.moveTo(sx1, sy1);
+    dxfCtx.lineTo(sx2, sy2);
+  }
+  dxfCtx.stroke();
+
+  /* snap indicator */
+  if (dxfMeasuring && dxfSnap) {
+    const [ssx, ssy] = dxfW2S(dxfSnap.x, dxfSnap.y);
+    dxfCtx.save();
+    dxfCtx.font = '9px "Space Grotesk", monospace';
+    dxfCtx.textAlign = 'left';
+    if (dxfSnap.type === 'endpoint') {
+      dxfCtx.strokeStyle = '#f2c285';
+      dxfCtx.fillStyle = 'rgba(242, 194, 133, 0.14)';
+      dxfCtx.lineWidth = 1.5;
+      dxfCtx.fillRect(ssx - 5.5, ssy - 5.5, 11, 11);
+      dxfCtx.strokeRect(ssx - 5.5, ssy - 5.5, 11, 11);
+      dxfCtx.fillStyle = '#f2c285';
+      dxfCtx.fillText('ENDPOINT', ssx + 10, ssy - 8);
+    } else if (dxfSnap.type === 'midpoint') {
+      dxfCtx.strokeStyle = '#e8ddcc';
+      dxfCtx.fillStyle = 'rgba(232, 221, 204, 0.14)';
+      dxfCtx.lineWidth = 1.5;
+      dxfCtx.beginPath();
+      dxfCtx.moveTo(ssx, ssy - 9); dxfCtx.lineTo(ssx + 9, ssy + 5.5); dxfCtx.lineTo(ssx - 9, ssy + 5.5);
+      dxfCtx.closePath(); dxfCtx.fill(); dxfCtx.stroke();
+      dxfCtx.fillStyle = '#e8ddcc';
+      dxfCtx.fillText('MIDPOINT', ssx + 10, ssy - 8);
+    } else {
+      dxfCtx.strokeStyle = '#9a8d78';
+      dxfCtx.fillStyle = 'rgba(154, 141, 120, 0.14)';
+      dxfCtx.lineWidth = 1.5;
+      dxfCtx.beginPath(); dxfCtx.arc(ssx, ssy, 7, 0, 2 * Math.PI); dxfCtx.fill(); dxfCtx.stroke();
+      dxfCtx.beginPath();
+      dxfCtx.moveTo(ssx - 11, ssy); dxfCtx.lineTo(ssx + 11, ssy);
+      dxfCtx.moveTo(ssx, ssy - 11); dxfCtx.lineTo(ssx, ssy + 11);
+      dxfCtx.stroke();
+      dxfCtx.fillStyle = '#9a8d78';
+      dxfCtx.fillText('NEAREST', ssx + 10, ssy - 8);
+    }
+    dxfCtx.restore();
+  }
+
+  /* measure overlay: ember thread between the two picked points */
+  if (dxfPts.length >= 1) {
+    const [sx1, sy1] = dxfW2S(dxfPts[0].x, dxfPts[0].y);
+    dxfCtx.fillStyle = '#d9a05b';
+    dxfCtx.beginPath(); dxfCtx.arc(sx1, sy1, 4.5, 0, 2 * Math.PI); dxfCtx.fill();
+
+    if (dxfPts.length >= 2) {
+      const [sx2, sy2] = dxfW2S(dxfPts[1].x, dxfPts[1].y);
+      dxfCtx.strokeStyle = '#d9a05b';
+      dxfCtx.lineWidth = 1.2;
+      dxfCtx.setLineDash([7, 4]);
+      dxfCtx.beginPath(); dxfCtx.moveTo(sx1, sy1); dxfCtx.lineTo(sx2, sy2); dxfCtx.stroke();
+      dxfCtx.setLineDash([]);
+      dxfCtx.beginPath(); dxfCtx.arc(sx2, sy2, 4.5, 0, 2 * Math.PI); dxfCtx.fill();
+
+      const dx = sx2 - sx1, dy = sy2 - sy1, len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len * 7, ny = dx / len * 7;
+      dxfCtx.beginPath();
+      dxfCtx.moveTo(sx1 + nx, sy1 + ny); dxfCtx.lineTo(sx1 - nx, sy1 - ny);
+      dxfCtx.moveTo(sx2 + nx, sy2 + ny); dxfCtx.lineTo(sx2 - nx, sy2 - ny);
+      dxfCtx.stroke();
+
+      const mx = (sx1 + sx2) / 2, my = (sy1 + sy2) / 2;
+      const dist = Math.hypot(dxfPts[1].x - dxfPts[0].x, dxfPts[1].y - dxfPts[0].y);
+      const label = dist.toFixed(2) + ' mm';
+      dxfCtx.font = '12px "Space Grotesk", monospace';
+      dxfCtx.textAlign = 'center';
+      const tw = dxfCtx.measureText(label).width;
+      dxfCtx.fillStyle = 'rgba(18, 13, 8, 0.85)';
+      dxfCtx.fillRect(mx - tw / 2 - 6, my - 21, tw + 12, 20);
+      dxfCtx.fillStyle = '#f2c285';
+      dxfCtx.fillText(label, mx, my - 6);
+      dxfCtx.textAlign = 'start';
+    }
+  }
+}
+
+function dxfFit() {
+  if (!dxfBounds) return;
+  dxfPts = [];
+  $('#dxf-result').hidden = true;
+  const pad = 30;
+  const bw = dxfBounds.maxX - dxfBounds.minX || 1;
+  const bh = dxfBounds.maxY - dxfBounds.minY || 1;
+  dxfView.scale = Math.min((dxfCW - pad * 2) / bw, (dxfCH - pad * 2) / bh);
+  dxfView.cx = (dxfBounds.minX + dxfBounds.maxX) / 2;
+  dxfView.cy = (dxfBounds.minY + dxfBounds.maxY) / 2;
+  dxfRedraw();
+}
+
+function draftLoadText(text, name) {
+  const n = dxfParse(text);
+  $('#dxf-info').textContent = `${n.toLocaleString()} lines · ${name || ''}`;
+  $('#dxf-drop').hidden = true;
+  $('#dxf-room').hidden = false;
+  dxfResize();
+  dxfFit();
+  $('#draft-status').textContent = `Cutting file loaded: ${n} line entities.`;
+  if (!reduceMotion) gsap.from('#dxf-room', { autoAlpha: 0, y: 26, duration: 0.8, ease: 'expo.out' });
+}
+
+/* ── drafting room wiring ── */
+const dxfDropEl = $('#dxf-drop'), dxfInputEl = $('#dxf-input');
+const dxfMeasureBtn = $('#dxf-measure-btn');
+
+const dxfReadFile = file => {
+  const reader = new FileReader();
+  reader.onload = e => draftLoadText(e.target.result, file.name);
+  reader.readAsText(file);
+};
+dxfDropEl.addEventListener('click', () => dxfInputEl.click());
+dxfInputEl.addEventListener('change', () => { if (dxfInputEl.files[0]) dxfReadFile(dxfInputEl.files[0]); });
+dxfDropEl.addEventListener('dragover', e => { e.preventDefault(); dxfDropEl.classList.add('drag-over'); });
+dxfDropEl.addEventListener('dragleave', () => dxfDropEl.classList.remove('drag-over'));
+dxfDropEl.addEventListener('drop', e => {
+  e.preventDefault();
+  dxfDropEl.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) dxfReadFile(f);
+});
+
+$('#dxf-fit').addEventListener('click', dxfFit);
+$('#dxf-zin').addEventListener('click', () => {
+  dxfView.scale = Math.min(dxfView.scale * 1.3, 50000); dxfRedraw();
+});
+$('#dxf-zout').addEventListener('click', () => {
+  dxfView.scale = Math.max(dxfView.scale / 1.3, 0.001); dxfRedraw();
+});
+dxfMeasureBtn.addEventListener('click', () => {
+  dxfMeasuring = !dxfMeasuring;
+  dxfPts = []; dxfSnap = null;
+  dxfMeasureBtn.setAttribute('aria-pressed', String(dxfMeasuring));
+  $('#dxf-result').hidden = true;
+  dxfCvs.style.cursor = dxfMeasuring ? 'crosshair' : 'grab';
+  dxfRedraw();
+});
+$('#dxf-clear').addEventListener('click', () => {
+  dxfPts = []; dxfSnap = null;
+  $('#dxf-result').hidden = true;
+  dxfRedraw();
+});
+$('#dxf-eject').addEventListener('click', () => {
+  dxfLines = []; dxfBounds = null; dxfPts = []; dxfSnap = null;
+  dxfMeasuring = false;
+  dxfMeasureBtn.setAttribute('aria-pressed', 'false');
+  $('#dxf-result').hidden = true;
+  $('#dxf-room').hidden = true;
+  $('#dxf-drop').hidden = false;
+  dxfInputEl.value = '';
+  $('#draft-status').textContent = 'Viewer cleared.';
+});
+
+const dxfPos = e => {
+  const r = dxfCvs.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+};
+function dxfMeasureClick(p) {
+  const snap = dxfSnapTo(p.x, p.y);
+  const [rawX, rawY] = dxfS2W(p.x, p.y);
+  const wx = snap ? snap.x : rawX, wy = snap ? snap.y : rawY;
+  if (dxfPts.length >= 2) dxfPts = [];
+  dxfPts.push({ x: wx, y: wy });
+  if (dxfPts.length === 2) {
+    const dist = Math.hypot(dxfPts[1].x - dxfPts[0].x, dxfPts[1].y - dxfPts[0].y);
+    $('#dxf-dist').textContent = dist.toFixed(3);
+    $('#dxf-dist-coords').textContent =
+      `(${dxfPts[0].x.toFixed(2)}, ${dxfPts[0].y.toFixed(2)}) → (${dxfPts[1].x.toFixed(2)}, ${dxfPts[1].y.toFixed(2)})`;
+    $('#dxf-result').hidden = false;
+  }
+  dxfRedraw();
+}
+
+dxfCvs.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  const p = dxfPos(e);
+  if (dxfMeasuring) { dxfMeasureClick(p); return; }
+  dxfPanning = true; dxfPanLast = p;
+  dxfCvs.style.cursor = 'grabbing';
+});
+dxfCvs.addEventListener('mousemove', e => {
+  const p = dxfPos(e);
+  if (dxfPanning) {
+    dxfView.cx -= (p.x - dxfPanLast.x) / dxfView.scale;
+    dxfView.cy += (p.y - dxfPanLast.y) / dxfView.scale;
+    dxfPanLast = p; dxfRedraw(); return;
+  }
+  if (dxfMeasuring) {
+    dxfSnap = dxfSnapTo(p.x, p.y);
+    if (dxfSnap) {
+      dxfCoordsEl.textContent = `x ${dxfSnap.x.toFixed(2)} mm   y ${dxfSnap.y.toFixed(2)} mm · ${dxfSnap.type}`;
+    } else {
+      const [wx, wy] = dxfS2W(p.x, p.y);
+      dxfCoordsEl.textContent = `x ${wx.toFixed(2)} mm   y ${wy.toFixed(2)} mm`;
+    }
+    dxfRedraw();
+  } else {
+    const [wx, wy] = dxfS2W(p.x, p.y);
+    dxfCoordsEl.textContent = `x ${wx.toFixed(2)} mm   y ${wy.toFixed(2)} mm`;
+  }
+});
+const dxfPanEnd = e => {
+  dxfPanning = false;
+  dxfCvs.style.cursor = dxfMeasuring ? 'crosshair' : 'grab';
+  if (e && e.type === 'mouseleave') { dxfSnap = null; if (dxfMeasuring) dxfRedraw(); }
+};
+dxfCvs.addEventListener('mouseup', dxfPanEnd);
+dxfCvs.addEventListener('mouseleave', dxfPanEnd);
+dxfCvs.addEventListener('wheel', e => {
+  e.preventDefault();
+  const p = dxfPos(e);
+  const [wx, wy] = dxfS2W(p.x, p.y);
+  const f = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  dxfView.scale = Math.max(0.001, Math.min(dxfView.scale * f, 50000));
+  dxfView.cx = wx - (p.x - dxfCW / 2) / dxfView.scale;
+  dxfView.cy = wy + (p.y - dxfCH / 2) / dxfView.scale;
+  dxfRedraw();
+}, { passive: false });
+
+const dxfTouchPos = t => {
+  const r = dxfCvs.getBoundingClientRect();
+  return { x: t.clientX - r.left, y: t.clientY - r.top };
+};
+dxfCvs.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    dxfPanLast = dxfTouchPos(e.touches[0]);
+    if (dxfMeasuring) dxfMeasureClick(dxfPanLast);
+  } else if (e.touches.length === 2) {
+    const a = dxfTouchPos(e.touches[0]), b = dxfTouchPos(e.touches[1]);
+    dxfPinch.dist = Math.hypot(b.x - a.x, b.y - a.y);
+    dxfPinch.cx = (a.x + b.x) / 2; dxfPinch.cy = (a.y + b.y) / 2;
+    dxfPinch.scale = dxfView.scale;
+    const [wx, wy] = dxfS2W(dxfPinch.cx, dxfPinch.cy);
+    dxfPinch.vcx = wx; dxfPinch.vcy = wy;
+  }
+}, { passive: false });
+dxfCvs.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && !dxfMeasuring) {
+    const p = dxfTouchPos(e.touches[0]);
+    dxfView.cx -= (p.x - dxfPanLast.x) / dxfView.scale;
+    dxfView.cy += (p.y - dxfPanLast.y) / dxfView.scale;
+    dxfPanLast = p; dxfRedraw();
+  } else if (e.touches.length === 2) {
+    const a = dxfTouchPos(e.touches[0]), b = dxfTouchPos(e.touches[1]);
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    dxfView.scale = Math.max(0.001, Math.min(dxfPinch.scale * (d / dxfPinch.dist), 50000));
+    dxfView.cx = dxfPinch.vcx - (dxfPinch.cx - dxfCW / 2) / dxfView.scale;
+    dxfView.cy = dxfPinch.vcy + (dxfPinch.cy - dxfCH / 2) / dxfView.scale;
+    dxfRedraw();
+  }
+}, { passive: false });
+
+window.addEventListener('resize', () => {
+  if (!$('#dxf-room').hidden) { dxfResize(); dxfRedraw(); }
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   MAZE BACKGROUND — a faint labyrinth behind the story; walls near
+   the cursor glow ember and cool down. Drifts gently with scroll.
+   ════════════════════════════════════════════════════════════════════ */
+(() => {
+  const bg = $('#maze-bg');
+  const bx = bg.getContext('2d');
+  const CELL = 64;
+  let segs = [], still = null, bgW = 0, bgH = 0, extra = CELL * 2;
+  const pointer = { x: -1e4, y: -1e4 };
+  let bgActive = false, bgRaf = 0, hadHeat = false, driftY = 0;
+
+  function buildBgMaze(cols, rows) {
+    const Wl = Array.from({ length: rows }, () =>
+      Array.from({ length: cols }, () => [true, true, true, true]));
+    const seen = Array.from({ length: rows }, () => new Array(cols).fill(false));
+    const stack = [[0, 0]];
+    seen[0][0] = true;
+    while (stack.length) {
+      const [r, c] = stack[stack.length - 1];
+      const opts = [];
+      for (let di = 0; di < 4; di++) {
+        const nr = r + DIRS[di][0], nc = c + DIRS[di][1];
+        if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !seen[nr][nc]) opts.push(di);
+      }
+      if (!opts.length) { stack.pop(); continue; }
+      const di = opts[Math.floor(Math.random() * opts.length)];
+      const nr = r + DIRS[di][0], nc = c + DIRS[di][1];
+      Wl[r][c][di] = false;
+      Wl[nr][nc][(di + 2) % 4] = false;
+      seen[nr][nc] = true;
+      stack.push([nr, nc]);
+    }
+    return Wl;
+  }
+
+  function bgRegen() {
+    bgW = innerWidth;
+    bgH = innerHeight + extra;
+    const dpr = Math.min(devicePixelRatio, 2);
+    bg.width = Math.round(bgW * dpr);
+    bg.height = Math.round(bgH * dpr);
+    bg.style.width = bgW + 'px';
+    bg.style.height = bgH + 'px';
+
+    const cols = Math.ceil(bgW / CELL), rows = Math.ceil(bgH / CELL);
+    const Wl = buildBgMaze(cols, rows);
+    segs = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const x = c * CELL, y = r * CELL;
+      if (Wl[r][c][0]) segs.push({ x1: x, y1: y, x2: x + CELL, y2: y, heat: 0 });
+      if (Wl[r][c][3]) segs.push({ x1: x, y1: y, x2: x, y2: y + CELL, heat: 0 });
+      if (r === rows - 1 && Wl[r][c][2]) segs.push({ x1: x, y1: y + CELL, x2: x + CELL, y2: y + CELL, heat: 0 });
+      if (c === cols - 1 && Wl[r][c][1]) segs.push({ x1: x + CELL, y1: y, x2: x + CELL, y2: y + CELL, heat: 0 });
+    }
+
+    still = document.createElement('canvas');
+    still.width = bg.width; still.height = bg.height;
+    const sx = still.getContext('2d');
+    sx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    sx.strokeStyle = 'rgba(232, 221, 204, 0.075)';
+    sx.lineWidth = 1;
+    sx.beginPath();
+    for (const s of segs) { sx.moveTo(s.x1 + 0.5, s.y1 + 0.5); sx.lineTo(s.x2 + 0.5, s.y2 + 0.5); }
+    sx.stroke();
+
+    bx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    bx.clearRect(0, 0, bgW, bgH);
+    bx.drawImage(still, 0, 0, bgW, bgH);
+  }
+
+  function bgFrame() {
+    if (!bgActive) { bgRaf = 0; return; }
+    bgRaf = requestAnimationFrame(bgFrame);
+
+    let maxHeat = 0;
+    const R = 170, R2 = R * R;
+    for (const s of segs) {
+      const dx = (s.x1 + s.x2) / 2 - pointer.x;
+      const dy = (s.y1 + s.y2) / 2 - pointer.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < R2) {
+        const h = 1 - Math.sqrt(d2) / R;
+        if (h > s.heat) s.heat = h;
+      }
+      s.heat *= 0.945;
+      if (s.heat < 0.005) s.heat = 0;
+      else if (s.heat > maxHeat) maxHeat = s.heat;
+    }
+
+    if (!hadHeat && maxHeat === 0) return;   // idle: the still image is already up
+    hadHeat = maxHeat > 0;
+
+    bx.clearRect(0, 0, bgW, bgH);
+    bx.drawImage(still, 0, 0, bgW, bgH);
+    bx.lineWidth = 1.4;
+    bx.lineCap = 'round';
+    for (const s of segs) {
+      if (!s.heat) continue;
+      bx.strokeStyle = `rgba(217, 160, 91, ${(s.heat * 0.5).toFixed(3)})`;
+      bx.beginPath();
+      bx.moveTo(s.x1 + 0.5, s.y1 + 0.5);
+      bx.lineTo(s.x2 + 0.5, s.y2 + 0.5);
+      bx.stroke();
+    }
+  }
+
+  window.addEventListener('pointermove', e => {
+    pointer.x = e.clientX;
+    pointer.y = e.clientY + driftY;
   }, { passive: true });
 
-  // ── RAF loop for smooth parallax (even without scroll) ──────────
-  function rafLoop() {
-    if (window.scrollY < window.innerHeight) {
-      const scrollH = heroScroll.offsetHeight - window.innerHeight;
-      const rawProg = clamp(window.scrollY / scrollH, 0, 1);
-      const easedImg = easeInOutQuart(clamp((rawProg - 0.03) / 0.87, 0, 1));
-      const parallaxFactor = 1 - easedImg;
+  window.addEventListener('scroll', () => {
+    if (!bgActive || reduceMotion) return;
+    driftY = (window.scrollY * 0.06) % extra;
+    bg.style.transform = `translateY(${-driftY}px)`;
+  }, { passive: true });
 
-      imgOffX += (mouseX * PARALLAX_STRENGTH * parallaxFactor - imgOffX) * 0.06;
-      imgOffY += (mouseY * PARALLAX_STRENGTH * parallaxFactor - imgOffY) * 0.06;
-      heroImg.style.transform = `translate(${imgOffX}px, ${imgOffY}px) scale(1.04)`;
+  let bgResizeT = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(bgResizeT);
+    bgResizeT = setTimeout(() => { if (segs.length) bgRegen(); }, 200);
+  });
+
+  new IntersectionObserver(entries => {
+    const inView = entries[0].isIntersecting;
+    bg.classList.toggle('lit', inView);
+    if (inView && !segs.length) bgRegen();
+    bgActive = inView && !reduceMotion;
+    if (bgActive && !bgRaf) bgRaf = requestAnimationFrame(bgFrame);
+  }, { threshold: 0 }).observe($('#story'));
+})();
+
+/* ════════════════════════════════════════════════════════════════════
+   CURSOR + MAGNETIC (fine pointers, full motion only)
+   ════════════════════════════════════════════════════════════════════ */
+if (finePointer && !reduceMotion) {
+  const dot = $('#cursor-dot');
+  cursorRing = $('#cursor-ring');
+  const ringPos = { x: innerWidth / 2, y: innerHeight / 2 };
+  let cx = ringPos.x, cy = ringPos.y, seen = false;
+
+  window.addEventListener('pointermove', e => {
+    cx = e.clientX; cy = e.clientY;
+    if (!seen) {
+      seen = true;
+      ringPos.x = cx; ringPos.y = cy;
+      gsap.to([dot, cursorRing], { opacity: 1, duration: 0.4 });
     }
-    requestAnimationFrame(rafLoop);
-  }
-  requestAnimationFrame(rafLoop);
+    dot.style.left = cx + 'px';
+    dot.style.top  = cy + 'px';
+  });
 
-  // ── IntersectionObserver for after-hero heading ──────────────────
-  const io = new IntersectionObserver(entries => {
-    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
-  }, { threshold: 0.3 });
-  io.observe(afterHeading);
+  (function ringLoop() {
+    ringPos.x += (cx - ringPos.x) * 0.16;
+    ringPos.y += (cy - ringPos.y) * 0.16;
+    cursorRing.style.left = ringPos.x + 'px';
+    cursorRing.style.top  = ringPos.y + 'px';
+    requestAnimationFrame(ringLoop);
+  })();
 
-  // ── Init ─────────────────────────────────────────────────────────
-  update();
+  document.querySelectorAll('[data-cursor], a').forEach(el => {
+    el.addEventListener('pointerenter', () => cursorRing.classList.add('on'));
+    el.addEventListener('pointerleave', () => cursorRing.classList.remove('on'));
+  });
+
+  // magnetic pull on primary buttons
+  document.querySelectorAll('#enter-btn, .cta, #interact-btn').forEach(el => {
+    const xTo = gsap.quickTo(el, 'x', { duration: 0.4, ease: 'power3.out' });
+    const yTo = gsap.quickTo(el, 'y', { duration: 0.4, ease: 'power3.out' });
+    el.addEventListener('pointermove', e => {
+      const r = el.getBoundingClientRect();
+      xTo((e.clientX - (r.left + r.width / 2)) * 0.18);
+      yTo((e.clientY - (r.top + r.height / 2)) * 0.18);
+    });
+    el.addEventListener('pointerleave', () => { xTo(0); yTo(0); });
+  });
+}
 </script>
+
 </body>
 </html>
